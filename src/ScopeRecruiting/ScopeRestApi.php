@@ -228,9 +228,11 @@
 			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), strtotime('+24 hours'));
 		}
 
-		public function setFilter(string $queryString): void {
-			if(!empty($queryString)) {
-				$query = explode('&', $queryString);
+		public function setFilter($query): void {
+			if(!empty($query)) {
+
+				$query = is_array($query) ? $this->build_http_query($query) : $query;
+				$query = explode('&', $query);
 
 				foreach($query as $param) {
 					// prevent notice on explode() if $param has no '='
@@ -240,7 +242,15 @@
 					list($name, $value) = explode('=', $param, 2);
 
 					if(array_key_exists(urldecode($name), $this->filter)) {
-						$this->filter[urldecode($name)][] = urldecode($value);
+
+						if(urldecode($name) == 'language') {
+							$this->filter[urldecode($name)] = urldecode($value);
+						} else {
+							if(!empty($this->filter[urldecode($name)])) {
+								$this->filter[urldecode($name)] = [];
+							}
+							$this->filter[urldecode($name)][] = urldecode($value);
+						}
 					}
 				}
 			}
