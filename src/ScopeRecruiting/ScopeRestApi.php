@@ -228,22 +228,19 @@
 			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), strtotime('+24 hours'));
 		}
 
-		public function setFilter(array $newFilterValues): void {
-			if(!empty($newFilterValues)) {
-				foreach($newFilterValues as $key => $value) {
-					if(in_array($key, array_keys($this->filter))) {
-						if(is_array($this->filter[$key])) {
-							$value = is_array($value) ? $value : [$value];
-							if(!empty($value)) {
-								foreach($value as $k => $v) {
-									$this->filter[$key][] = $v;
-								}
-							} else {
-								$this->filter[$key] = [];
-							}
-						} else {
-							$this->filter[$key] = $value;
-						}
+		public function setFilter(string $queryString): void {
+			if(!empty($queryString)) {
+				$query = explode('&', $queryString);
+
+				foreach($query as $param) {
+					// prevent notice on explode() if $param has no '='
+					if(strpos($param, '=') === false)
+						$param += '=';
+
+					list($name, $value) = explode('=', $param, 2);
+
+					if(array_key_exists(urldecode($name), $this->filter)) {
+						$this->filter[urldecode($name)][] = urldecode($value);
 					}
 				}
 			}
@@ -542,8 +539,10 @@
 				}
 
 				$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
-				$queryData   = $this->build_http_query($query);
-				$curl        = curl_init($this->scope_url . $url . '?' . $queryData);
+
+				$queryData = $this->build_http_query($query);
+
+				$curl = curl_init($this->scope_url . $url . '?' . $queryData);
 
 				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 				curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
