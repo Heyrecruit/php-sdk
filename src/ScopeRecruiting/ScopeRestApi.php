@@ -529,6 +529,27 @@
 			die;
 		}
 
+		public function build_http_query($query) {
+
+			$query_array = [];
+
+			foreach($query as $key => $key_value) {
+				if(is_array($key_value)) {
+					foreach($key_value as $k => $v) {
+						if(!empty($v)) {
+							$query_array[] = urlencode($key) . '=' . urlencode($v);
+						}
+					}
+				} else {
+					if(!empty($key_value)) {
+						$query_array[] = urlencode($key) . '=' . urlencode($key_value);
+					}
+				}
+			}
+
+			return implode('&', $query_array);
+		}
+
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
 
 			if(!$this->isTokenExpired()) {
@@ -636,24 +657,4 @@
 			return $success;
 		}
 
-		private function build_http_query($query) {
-
-			$query_array = [];
-
-			foreach($query as $key => $key_value) {
-				if(is_array($key_value)) {
-					foreach($key_value as $k => $v) {
-						if(!empty($v)) {
-							$query_array[] = urlencode($key) . '=' . urlencode($v);
-						}
-					}
-				} else {
-					if(!empty($key_value)) {
-						$query_array[] = urlencode($key) . '=' . urlencode($key_value);
-					}
-				}
-			}
-
-			return implode('&', $query_array);
-		}
 	}
