@@ -1,0 +1,31 @@
+{
+  "name": "werbeagentur_artrevolver/scope-rest-api",
+  "description": "PHP SDK for implementing scope recruiting with rest api.",
+  "homepage": "https://scope-recruiting.de",
+  "keywords": [
+    "scope",
+    "recruiting",
+    "artrevolver"
+  ],
+  "license": "WTFPL",
+  "authors": [
+    {
+      "name": "Oleg Mutzenberger",
+      "email": "oleg@artrevolver.de"
+    },
+    {
+      "name": "Artrevolver",
+      "homepage": "https://artrevolver.de"
+    }
+  ],
+  "version": "dev-master",
+  "type": "project",
+  "require": {
+    "php": ">=7.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "ScopeRecruiting\\": "src/ScopeRecruiting"
+    }
+  }
+}
