@@ -1,5 +1,5 @@
 {
-  "name": "werbeagentur_artrevolver/scope-rest-api",
+  "name": "werbeagentur_artrevolver/scope-php-sdk",
   "description": "PHP SDK for implementing scope recruiting with rest api.",
   "homepage": "https://scope-recruiting.de",
   "keywords": [
