@@ -235,21 +235,24 @@
 				$query = explode('&', $query);
 
 				foreach($query as $param) {
-					// prevent notice on explode() if $param has no '='
-					if(strpos($param, '=') === false)
-						$param += '=';
 
-					list($name, $value) = explode('=', $param, 2);
+					if(!empty($param)) {
+						// prevent notice on explode() if $param has no '='
+						if(strpos($param, '=') === false)
+							$param += '=';
 
-					if(array_key_exists(urldecode($name), $this->filter)) {
+						list($name, $value) = explode('=', $param, 2);
 
-						if(urldecode($name) == 'language') {
-							$this->filter[urldecode($name)] = urldecode($value);
-						} else {
-							if(!empty($this->filter[urldecode($name)])) {
-								$this->filter[urldecode($name)] = [];
+						if(array_key_exists(urldecode($name), $this->filter)) {
+
+							if(urldecode($name) == 'language') {
+								$this->filter[urldecode($name)] = urldecode($value);
+							} else {
+								if(!empty($this->filter[urldecode($name)])) {
+									$this->filter[urldecode($name)] = [];
+								}
+								$this->filter[urldecode($name)][] = urldecode($value);
 							}
-							$this->filter[urldecode($name)][] = urldecode($value);
 						}
 					}
 				}
