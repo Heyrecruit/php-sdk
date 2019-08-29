@@ -231,7 +231,7 @@
 		public function setFilter($query): void {
 			if(!empty($query)) {
 
-				$query = is_array($query) ? $this->build_http_query($query) : $query;
+				$query = is_array($query) ? $this->buildHttpQuery($query) : $query;
 				$query = explode('&', $query);
 
 				foreach($query as $param) {
@@ -342,16 +342,12 @@
 			return $expired;
 		}
 
-		public function getJobs(): array {
-			return $this->curlGet($this->url['get_jobs'], null, $this->filter);
-		}
-
-		public function saveApplicant(array $data, int $jobId): array {
-			$response = $this->curlPost($this->url['add_applicant'] . '/' . $jobId, null, $data);
+		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
+			$response = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
 
 			if(!$response['success']) {
-				if(!in_array($response['error']['detail'], ['duplicateJobApplication', 'validationError'])) {
-					throw new Exception('Error while trying to save saveApplicant. Url: ' . $this->url['add_applicant'] . '/' . $jobId . ' Error message: ' . $response['error']['message']);
+				if(!in_array($response['error']['detail'], ['Duplicate application', 'Validation error'])) {
+					throw new Exception('Error while trying to  save applicant. Url: ' . $this->url['add_applicant'] . '/' . $jobId . ' Error message: ' . $response['error']['message']);
 				}
 			}
 
@@ -423,8 +419,8 @@
 			return $result;
 		}
 
-		public function getCompanyAuthData(): array {
-			return $this->auth['company'];
+		public function getJobs(): array {
+			return $this->curlGet($this->url['get_jobs'], null, $this->filter);
 		}
 
 		public function getGoogleTagCode(): array {
@@ -461,6 +457,10 @@
 			return $tagCode;
 		}
 
+		public function getCompanyAuthData(): array {
+			return $this->auth['company'];
+		}
+
 		public function getApplicantAuthData(): array {
 			return $this->auth['applicant'];
 		}
@@ -479,7 +479,8 @@
 			return $companyLocation;
 		}
 
-		public function getFormattedAddress($companyLocation = null, $street = true, $city = true, $country = true) {
+		// TODO: Refactor
+		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $country = true): string {
 			$address = '';
 
 			if(!empty($companyLocation)) {
@@ -503,14 +504,13 @@
 			return $address;
 		}
 
-		public function getEmploymentTypeList($jobs = []) {
+		public function getEmploymentTypeList(array $jobs = []): array {
 			$list = [];
 			foreach($jobs as $key => $value) {
 
 				if(!empty($value['Job']['employment'])) {
 
 					$employments = explode(',', $value['Job']['employment']);
-
 					$employments = is_array($employments) ? $employments : [$employments];
 
 					foreach($employments as $k => $v) {
@@ -524,25 +524,7 @@
 			return $list;
 		}
 
-		public function getCurrentPageURL(string $part = 'full'): string {
-			$url = $part === 'full'
-				? $this->analytics['current_page']['scheme'] . '://' .
-				  $this->analytics['current_page']['host'] .
-				  $this->analytics['current_page']['path'] .
-				  $this->analytics['current_page']['query']
-				: $this->analytics['current_page'][$part];
-
-			return $url;
-		}
-
-		public function printH($data): void {
-			echo "<pre>";
-			print_r($data);
-			echo "</pre>";
-			die;
-		}
-
-		public function build_http_query($query) {
+		public function buildHttpQuery(array $query = []): string {
 
 			$query_array = [];
 
@@ -563,6 +545,24 @@
 			return implode('&', $query_array);
 		}
 
+		public function getCurrentPageURL(string $part = 'full'): string {
+			$url = $part === 'full'
+				? $this->analytics['current_page']['scheme'] . '://' .
+				  $this->analytics['current_page']['host'] .
+				  $this->analytics['current_page']['path'] .
+				  $this->analytics['current_page']['query']
+				: $this->analytics['current_page'][$part];
+
+			return $url;
+		}
+
+		public function printH($data): void {
+			echo "<pre>";
+			print_r($data);
+			echo "</pre>";
+			die;
+		}
+
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
 
 			if(!$this->isTokenExpired()) {
@@ -574,7 +574,7 @@
 
 				$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
 
-				$queryData = $this->build_http_query($query);
+				$queryData = $this->buildHttpQuery($query);
 
 				$curl = curl_init($this->scope_url . $url . '?' . $queryData);
 
@@ -637,7 +637,7 @@
 			return $text;
 		}
 
-		// TODO: Delete this function after new dashboard launch!
+		/*// TODO: Delete this function after new dashboard launch!
 		public function saveJobView(int $jobId, int $companyLocationId, ?string $applicantJobId, string $referrer): bool {
 			$success = false;
 
@@ -668,6 +668,6 @@
 			}
 
 			return $success;
-		}
+		}*/
 
 	}
