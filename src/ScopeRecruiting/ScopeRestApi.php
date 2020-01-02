@@ -231,7 +231,7 @@
 		public function setFilter($query): void {
 			if(!empty($query)) {
 
-				$query = is_array($query) ? $this->buildHttpQuery($query) : $query;
+				$query = is_array($query) ? $this->build_http_query($query) : $query;
 				$query = explode('&', $query);
 
 				foreach($query as $param) {
@@ -251,7 +251,12 @@
 								if(!empty($this->filter[urldecode($name)])) {
 									$this->filter[urldecode($name)] = [];
 								}
-								$this->filter[urldecode($name)][] = urldecode($value);
+
+								if($value !== 'false') {
+									$this->filter[urldecode($name)][] = urldecode($value);
+								} else {
+									unset($this->filter[urldecode($name)]);
+								}
 							}
 						}
 					}
@@ -531,13 +536,23 @@
 			foreach($query as $key => $key_value) {
 				if(is_array($key_value)) {
 					foreach($key_value as $k => $v) {
-						if(!empty($v)) {
-							$query_array[] = urlencode($key) . '=' . urlencode($v);
+						if(!empty($v) || $v === false) {
+							if(is_bool($v)) {
+								$v = $v ? 'true' : 'false';
+							} else {
+								$v = urlencode($v);
+							}
+							$query_array[] = urlencode($key) . '=' . $v;
 						}
 					}
 				} else {
-					if(!empty($key_value)) {
-						$query_array[] = urlencode($key) . '=' . urlencode($key_value);
+					if(!empty($key_value) || $key_value === false) {
+						if(is_bool($key_value)) {
+							$key_value = $key_value ? 'true' : 'false';
+						} else {
+							$key_value = urlencode($key_value);
+						}
+						$query_array[] = urlencode($key) . '=' . $key_value;
 					}
 				}
 			}
