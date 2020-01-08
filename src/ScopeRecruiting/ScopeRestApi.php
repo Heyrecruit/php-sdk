@@ -529,7 +529,7 @@
 			return $list;
 		}
 
-		public function buildHttpQuery(array $query = []): string {
+		public function build_http_query($query) {
 
 			$query_array = [];
 
