@@ -589,7 +589,7 @@
 
 				$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
 
-				$queryData = $this->buildHttpQuery($query);
+				$queryData = $this->build_http_query($query);
 
 				$curl = curl_init($this->scope_url . $url . '?' . $queryData);
 
