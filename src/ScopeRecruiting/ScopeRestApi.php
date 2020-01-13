@@ -19,6 +19,9 @@
 
 	use Exception;
 	use InvalidArgumentException;
+	use ReallySimpleJWT\Token;
+
+	require 'vendor/autoload.php';
 
 	/**
 	 * Class ScopeRestApi
@@ -184,13 +187,9 @@
 				throw new InvalidArgumentException('Missing SCOPE_CLIENT_SECRET parameter.');
 			}
 
-			$stamp     = strtotime('now');
-			$signature = hash_hmac('SHA256', (string) $stamp, $config['SCOPE_CLIENT_SECRET']);
-
 			$this->auth_config['company'] = [
-				'client_id'        => $config['SCOPE_CLIENT_ID'],
-				'client_signature' => $signature,
-				'timestamp'        => $stamp
+				'client_id'     => $config['SCOPE_CLIENT_ID'],
+				'client_secret' => $config['SCOPE_CLIENT_SECRET']
 			];
 		}
 
@@ -289,10 +288,10 @@
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 			curl_close($curl);
 
-			if($result['success']) {
-				$this->auth['company']['token']          = $result['token'];
-				$this->auth['company']['expirationDate'] = $result['expiration_date'];
-				$this->auth['company']['data']           = $result['data'];
+			if($result['success'] && $this->validateToken($result['token'])) {
+				$this->auth['company']['token']      = $result['token'];
+				$this->auth['company']['expiration'] = $result['expiration'];
+				$this->auth['company']['data']       = $result['data'];
 
 				return $result;
 			}
@@ -323,7 +322,7 @@
 
 				if($result['success']) {
 					$this->auth['applicant']['token']          = $result['token'];
-					$this->auth['applicant']['expirationDate'] = $result['expiration_date'];
+					$this->auth['applicant']['expiration'] = $result['expiration_date'];
 					$this->auth['applicant']['data']           = $result['data'];
 
 					return $result;
@@ -335,16 +334,9 @@
 			throw new Exception('Token has expired!');
 		}
 
-		public function isTokenExpired(): bool {
-			$expired = true;
-
-			if(!empty($this->auth['company']['token']) && !empty($this->auth['company']['expirationDate']) &&
-			   date('Y-m-d H:i:s') < date('Y-m-d H:i:s', strtotime($this->auth['company']['expirationDate']))
-			) {
-				$expired = false;
-			}
-
-			return $expired;
+		public function validateToken(string $token = ''): bool {
+			$result = Token::validate($token, $this->auth_config['company']['client_secret']);
+			return $result;
 		}
 
 		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
@@ -369,7 +361,11 @@
 				'success' => false
 			];
 
-			if(!empty($data) && !empty($documentType) && !empty($jobId) && !empty($companyLocationId) && !$this->isTokenExpired()) {
+			if(!empty($data) && !empty($documentType) && !empty($jobId) && !empty($companyLocationId)) {
+
+				if(!$this->validateToken()) {
+					$this->authenticateCompany();
+				}
 
 				$dataString = json_encode($data);
 
@@ -401,7 +397,11 @@
 				'success' => false
 			];
 
-			if(!empty($name) && !empty($applicantId) && !empty($docType) && !$this->isTokenExpired()) {
+			if(!empty($name) && !empty($applicantId) && !empty($docType)) {
+
+				if(!$this->validateToken()) {
+					$this->authenticateCompany();
+				}
 
 				$dataString = json_encode([]);
 
@@ -580,68 +580,67 @@
 
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
 
-			if(!$this->isTokenExpired()) {
-
-				if(empty($header)) {
-					$header[] = "Token: " . $this->auth['company']['token'];
-					$header[] = "Content-Type: application/json; charset: UTF-8";
-				}
-
-				$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
-
-				$queryData = $this->build_http_query($query);
-
-				$curl = curl_init($this->scope_url . $url . '?' . $queryData);
-
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-
-				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
-				curl_close($curl);
-
-				$dataParameter = isset($result['data']) ? 'data' : 'response';
-
-				if($result['success'] && isset($result[$dataParameter])) {
-					return $result[$dataParameter];
-				}
-
-				throw new Exception('Error while trying to get url: ' . $url . ' Error message: ' . $result['error']['message']);
+			if(!$this->validateToken()) {
+				$this->authenticateCompany();
 			}
 
-			throw new Exception('Token has expired!');
+			if(empty($header)) {
+				$header[] = "Authorization: Bearer " . $this->auth['company']['token'];
+				$header[] = "Content-Type: application/json; charset: UTF-8";
+			}
+
+			$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
+
+			$queryData = $this->build_http_query($query);
+
+			$curl = curl_init($this->scope_url . $url . '?' . $queryData);
+
+			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+
+			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+
+			curl_close($curl);
+
+			$dataParameter = isset($result['data']) ? 'data' : 'response';
+
+			if($result['success'] && isset($result[$dataParameter])) {
+				return $result[$dataParameter];
+			}
+
+			throw new Exception('Error while trying to get url: ' . $url . ' Error message: ' . $result['error']['message']);
+
 		}
 
 		private function curlPost(string $url, ?array $header = [], array $data = []): array {
 
-			if(!$this->isTokenExpired()) {
-
-				if($this->analytics['active']) {
-					$data += $this->analytics;
-					unset($data['active']);
-				}
-
-				$dataString = json_encode($data);
-
-				if(empty($header)) {
-					$header[] = "Token: " . $this->auth['company']['token'];
-					$header[] = "Content-Type: application/json; charset: UTF-8";
-				}
-
-				$curl = curl_init($this->scope_url . $url);
-				curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
-				curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
-				curl_close($curl);
-
-				return $result;
+			if(!$this->validateToken()) {
+				$this->authenticateCompany();
 			}
 
-			throw new Exception('Token has expired!');
+			if($this->analytics['active']) {
+				$data += $this->analytics;
+				unset($data['active']);
+			}
+
+			$dataString = json_encode($data);
+
+			if(empty($header)) {
+				$header[] = "Authorization: Bearer " . $this->auth['company']['token'];
+				$header[] = "Content-Type: application/json; charset: UTF-8";
+			}
+
+			$curl = curl_init($this->scope_url . $url);
+			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
+			curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
+			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+
+			curl_close($curl);
+
+			return $result;
 		}
 
 		// Remove multiple UTF-8 BOM sequences

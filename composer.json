@@ -18,10 +18,11 @@
       "homepage": "https://www.scope-recruiting.de"
     }
   ],
-  "version": "dev-master",
+  "version": "0.0.1",
   "type": "project",
   "require": {
-    "php": ">=7.1"
+    "php": ">=7.1",
+    "rbdwllr/reallysimplejwt": "^2.0"
   },
   "autoload": {
     "psr-4": {
