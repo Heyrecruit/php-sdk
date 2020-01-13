@@ -334,7 +334,7 @@
 			throw new Exception('Token has expired!');
 		}
 
-		public function validateToken(string $token = ''): bool {
+		public function validateToken(?string $token = null): bool {
 			$result = Token::validate($token, $this->auth_config['company']['client_secret']);
 			return $result;
 		}
