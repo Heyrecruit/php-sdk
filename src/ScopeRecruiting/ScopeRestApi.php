@@ -21,7 +21,7 @@
 	use InvalidArgumentException;
 	use ReallySimpleJWT\Token;
 
-	require 'vendor/autoload.php';
+	//require 'vendor/autoload.php';
 
 	/**
 	 * Class ScopeRestApi
@@ -74,11 +74,10 @@
 		 * array['company']                     array Holds the company auth for requesting a authorization token.
 		 *          ['timestamp']               int Timestamp of the auth request.
 		 *          ['client_id']               int The company id of a registered SCOPE client.
-		 *          ['client_signature']        string hash_hmac SHA256 of client_secret and request timestamp.
+		 *          ['client_secret']           string The company secret.
 		 *      ['applicant']                   array Holds the company auth for requesting a authorization token.
 		 *          ['timestamp']               int Timestamp of the auth request.
 		 *          ['applicant_email']         string E-Mail address of an applicant that has applied by the company.
-		 *          ['applicant_signature']     string hash_hmac SHA256 of applicant_secret and request timestamp.
 		 *
 		 *
 		 * @var array $auth_config (See above)
@@ -86,14 +85,13 @@
 		 */
 		protected $auth_config = [
 			'company'   => [
-				'timestamp'        => null,
-				'client_id'        => null,
-				'client_signature' => null
+				'timestamp'     => null,
+				'client_id'     => null,
+				'client_secret' => null
 			],
 			'applicant' => [
-				'timestamp'           => null,
-				'applicant_email'     => null,
-				'applicant_signature' => null
+				'timestamp'       => null,
+				'applicant_email' => null,
 			]
 		];
 
@@ -117,11 +115,11 @@
 			'id'             => [],
 			'applicant_id'   => null,
 			'language'       => 'de',
-			'location'       => null,
+			'location'       => [],
 			'department'     => [],
-			'employment'     => null,
+			'employment'     => [],
 			'address'        => null,
-			'internal_title' => null
+			'internal_title' => []
 		];
 
 		/**
@@ -131,6 +129,7 @@
 		 *      ['applicant_auth']      string Applicant authentication and requesting an authorization token url.
 		 *      ['get_company']         string Get company data url.
 		 *      ['get_jobs']            string Get jobs data url.
+		 *      ['get_job']             string Get single job data url.
 		 *      ['add_applicant']       string Add  new applicant url.
 		 *      ['upload_documents']    string Upload applicant documents url.
 		 *      ['delete_documents']    string Delete applicant documents url.
@@ -144,6 +143,7 @@
 			'applicant_auth'   => 'rest_applicants/auth',
 			'get_company'      => 'rest_companies/view',
 			'get_jobs'         => 'rest_jobs/index',
+			'get_job'          => 'rest_jobs/view',
 			'add_applicant'    => 'rest_applicants/add',
 			'upload_documents' => 'rest_applicants/upload',
 			'delete_documents' => 'rest_applicants/deleteFile',
@@ -179,6 +179,15 @@
 			$this->setCurrentPageURL();
 		}
 
+		/**
+		 *  Sets company auth data for requesting an JWT access token
+		 *
+		 *  array['SCOPE_CLIENT_ID']         int The company id of a registered SCOPE client.
+		 *       ['SCOPE_CLIENT_SECRET']     string Applicant authentication and requesting an authorization token url.
+		 *
+		 * @return void
+		 *
+		 */
 		public function setCompanyAuthConfig(array $config): void {
 			if(!isset($config['SCOPE_CLIENT_ID'])) {
 				throw new InvalidArgumentException('Missing SCOPE_CLIENT_ID parameter.');
@@ -193,76 +202,42 @@
 			];
 		}
 
-		public function setApplicantAuthConfig(string $email, string $password): void {
-			if(empty($email)) {
-				throw new InvalidArgumentException('Missing email parameter.');
-			}
-			if(empty($password)) {
-				throw new InvalidArgumentException('Missing password parameter.');
-			}
-
-			$stamp          = strtotime('now');
-			$hashedPassword = password_hash($password, PASSWORD_BCRYPT, ['salt' => 'rgfoijewjf8273487bnfew']);
-
-			echo '###' . $hashedPassword . '###';
-
-			$signature = hash_hmac('SHA256', (string) $stamp, $hashedPassword);
-
-			$this->auth_config['applicant'] = [
-				'applicant_email'     => $email,
-				'applicant_signature' => $signature,
-				'timestamp'           => $stamp
-			];
-		}
-
 		/**
-		 *  Saves tracking information (analytics array) to a visitors cookie.
+		 *  Sets tracking information (analytics array) to a visitors cookie.
 		 *
 		 * @return void
 		 *
 		 */
-
 		public function setAnalyticsCookie(): void {
 			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), strtotime('+24 hours'));
 			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), strtotime('+24 hours'));
 		}
 
-		public function setFilter($query): void {
-			if(!empty($query)) {
-
-				$query = is_array($query) ? $this->build_http_query($query) : $query;
-				$query = explode('&', $query);
-
-				foreach($query as $param) {
-
-					if(!empty($param)) {
-						// prevent notice on explode() if $param has no '='
-						if(strpos($param, '=') === false)
-							$param += '=';
-
-						list($name, $value) = explode('=', $param, 2);
-
-						if(array_key_exists(urldecode($name), $this->filter)) {
-
-							if(urldecode($name) == 'language') {
-								$this->filter[urldecode($name)] = urldecode($value);
-							} else {
-								if(!empty($this->filter[urldecode($name)])) {
-									$this->filter[urldecode($name)] = [];
-								}
-
-								if($value !== 'false') {
-									$this->filter[urldecode($name)][] = urldecode($value);
-								} else {
-									unset($this->filter[urldecode($name)]);
-								}
-							}
-						}
-					}
-				}
+		/**
+		 *  Sets the job filter data submitted with get jobs request
+		 *
+		 * @return void
+		 *
+		 */
+		public function setFilter(string $queryParams = ''): void {
+			if(!empty($queryParams)) {
+				$qs = preg_replace("/(?<=^|&)(\w+)(?==)/", "$1[]", $queryParams);
+				parse_str($qs, $new_GET);
+				// Replace only the wanted keys
+				$this->filter = array_replace($this->filter, array_intersect_key($new_GET, $this->filter));
+				// Only one language allowed
+				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
+				// Only one address allowed
+				$this->filter['address'] = !empty($this->filter['address']) ? $this->filter['address'][0] : null;
 			}
 		}
 
+		/**
+		 *  Sets the current page url for analytics
+		 *
+		 * @return void
+		 *
+		 */
 		public function setCurrentPageURL(): void {
 			$pageURL = 'http';
 			if($_SERVER["HTTPS"] == "on") {
@@ -274,24 +249,35 @@
 			$this->analytics['current_page'] = parse_url($pageURL) + $this->analytics['current_page'];
 		}
 
+		/**
+		 *  Sets the current referrer url for analytics
+		 *
+		 * @return void
+		 *
+		 */
 		public function setReferrer(?string $url): void {
 			if(!empty($url) && strpos($url, $this->analytics['current_page']['host']) === false) {
 				$this->analytics['referrer'] = parse_url($url) + $this->analytics['referrer'];
 			}
 		}
 
+		/**
+		 *  Swaps a client_id and client_secret for an JWT auth token and gets the company data
+		 *
+		 * @return array
+		 * @throws Exception
+		 *
+		 */
 		public function authenticateCompany(): array {
 			$curl = curl_init($this->scope_url . $this->url['company_auth']);
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config['company']);
 
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-			curl_close($curl);
 
 			if($result['success'] && $this->validateToken($result['token'])) {
-				$this->auth['company']['token']      = $result['token'];
-				$this->auth['company']['expiration'] = $result['expiration'];
-				$this->auth['company']['data']       = $result['data'];
+				$this->auth['company']['token'] = $result['token'];
+				$this->auth['company']['data']  = $result['data'];
 
 				return $result;
 			}
@@ -299,44 +285,52 @@
 			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
 		}
 
-		public function authenticateApplicant(): array {
-			if(!$this->isTokenExpired()) {
+		/**
+		 *  Checks if the JWT token is valid.
+		 *
+		 * @return bool
+		 *
+		 */
+		public function validateToken(?string $token): bool {
+			$result = Token::validate($token, $this->auth_config['company']['client_secret']);
 
-				$dataString = json_encode($this->auth_config['applicant']);
-
-				$url = $this->scope_url . $this->url['applicant_auth'];
-
-				$headr[] = "Token: " . $this->auth['company']['token'];
-				$headr[] = "Content-Type: application/json; charset=utf-8";
-
-				$curl = curl_init($url);
-
-				curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
-				curl_setopt($curl, CURLOPT_HTTPHEADER, $headr);
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
-
-				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
-				curl_close($curl);
-
-				if($result['success']) {
-					$this->auth['applicant']['token']          = $result['token'];
-					$this->auth['applicant']['expiration'] = $result['expiration_date'];
-					$this->auth['applicant']['data']           = $result['data'];
-
-					return $result;
-				}
-
-				throw new \Exception('Auth error! Message from Scope: ' . $result['error']['message']);
-			}
-
-			throw new Exception('Token has expired!');
+			return $result;
 		}
 
-		public function validateToken(?string $token = null): bool {
-			$result = Token::validate($token, $this->auth_config['company']['client_secret']);
-			return $result;
+		/**
+		 *  Find jobs from SCOPE based on the pre defined filter values.
+		 *
+		 * @return array
+		 *
+		 */
+		public function getJobs(): array {
+			return $this->curlGet($this->url['get_jobs'], null, $this->filter);
+		}
+
+		/**
+		 *  Get one job from SCOPE.
+		 *
+		 * @param int    $jobId             : The ID of the job to get from SCOPE.
+		 * @param int    $companyLocationId : The ID of the company location that belongs to the job.
+		 * @param string $lng               : The language shortcut.
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function getJob(?int $jobId = null, ?int $companyLocationId = null, string $lng = ''): array {
+
+			if(empty($jobId)) {
+				throw new Exception('Missing job id parameter');
+			}
+			if(empty($companyLocationId)) {
+				throw new Exception('Missing company location id parameter');
+			}
+
+			$lng = empty($lng) ? $this->filter['language'] : $lng;
+
+			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '/' . $lng;
+
+			return $this->curlGet($url, null);
 		}
 
 		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
@@ -399,7 +393,7 @@
 
 			if(!empty($name) && !empty($applicantId) && !empty($docType)) {
 
-				if(!$this->validateToken()) {
+				if(!$this->validateToken($this->auth['company']['token'])) {
 					$this->authenticateCompany();
 				}
 
@@ -422,10 +416,6 @@
 			}
 
 			return $result;
-		}
-
-		public function getJobs(): array {
-			return $this->curlGet($this->url['get_jobs'], null, $this->filter);
 		}
 
 		public function getGoogleTagCode(): array {
@@ -470,21 +460,6 @@
 			return $this->auth['applicant'];
 		}
 
-		public function getCompanyLocationFromJobById(array $job = [], int $companyLocationId): array {
-			$companyLocation = null;
-			if(!empty($job) && isset($job['CompanyLocationJob']) && !empty($companyLocationId)) {
-
-				foreach($job['CompanyLocationJob'] as $key => $value) {
-					if($value['company_location_id'] == $companyLocationId) {
-						$companyLocation = $value;
-					}
-				}
-			}
-
-			return $companyLocation;
-		}
-
-		// TODO: Refactor
 		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $country = true): string {
 			$address = '';
 
@@ -580,7 +555,7 @@
 
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
 
-			if(!$this->validateToken()) {
+			if(!$this->validateToken($this->auth['company']['token'])) {
 				$this->authenticateCompany();
 			}
 
@@ -591,7 +566,7 @@
 
 			$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
 
-			$queryData = $this->build_http_query($query);
+			$queryData = http_build_query($query);
 
 			$curl = curl_init($this->scope_url . $url . '?' . $queryData);
 
@@ -602,19 +577,12 @@
 
 			curl_close($curl);
 
-			$dataParameter = isset($result['data']) ? 'data' : 'response';
-
-			if($result['success'] && isset($result[$dataParameter])) {
-				return $result[$dataParameter];
-			}
-
-			throw new Exception('Error while trying to get url: ' . $url . ' Error message: ' . $result['error']['message']);
-
+			return $result;
 		}
 
 		private function curlPost(string $url, ?array $header = [], array $data = []): array {
 
-			if(!$this->validateToken()) {
+			if(!$this->validateToken($this->auth['company']['token'])) {
 				$this->authenticateCompany();
 			}
 
@@ -651,17 +619,35 @@
 			return $text;
 		}
 
-		/*// TODO: Delete this function after new dashboard launch!
-		public function saveJobView(int $jobId, int $companyLocationId, ?string $applicantJobId, string $referrer): bool {
-			$success = false;
+		/*public function setApplicantAuthConfig(string $email, string $password): void {
+			if(empty($email)) {
+				throw new InvalidArgumentException('Missing email parameter.');
+			}
+			if(empty($password)) {
+				throw new InvalidArgumentException('Missing password parameter.');
+			}
 
-			if(!empty($jobId) && !$this->isTokenExpired()) {
+			$stamp          = strtotime('now');
+			$hashedPassword = password_hash($password, PASSWORD_BCRYPT, ['salt' => 'rgfoijewjf8273487bnfew']);
 
-				$url = $this->scope_url . 'rest_jobs/saveJobView/' .
-				       $jobId . '?referrer=' .
-				       urlencode($referrer) . '&location=' .
-				       $companyLocationId . '&applicant_job=' .
-				       $applicantJobId;
+			echo '###' . $hashedPassword . '###';
+
+			$signature = hash_hmac('SHA256', (string) $stamp, $hashedPassword);
+
+			$this->auth_config['applicant'] = [
+				'applicant_email'     => $email,
+				'applicant_signature' => $signature,
+				'timestamp'           => $stamp
+			]
+		};
+
+
+		public function authenticateApplicant(): array {
+			if(!$this->isTokenExpired()) {
+
+				$dataString = json_encode($this->auth_config['applicant']);
+
+				$url = $this->scope_url . $this->url['applicant_auth'];
 
 				$headr[] = "Token: " . $this->auth['company']['token'];
 				$headr[] = "Content-Type: application/json; charset=utf-8";
@@ -671,17 +657,26 @@
 				curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
 				curl_setopt($curl, CURLOPT_HTTPHEADER, $headr);
 				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
 
 				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 
 				curl_close($curl);
 
-				if(!$result['success']) {
-					throw new Exception('Error : ' . $result['error']['message'], $result['error']['code']);
+				if($result['success']) {
+					$this->auth['applicant']['token']          = $result['token'];
+					$this->auth['applicant']['expiration'] = $result['expiration_date'];
+					$this->auth['applicant']['data']           = $result['data'];
+
+					return $result;
 				}
+
+				throw new \Exception('Auth error! Message from Scope: ' . $result['error']['message']);
 			}
 
-			return $success;
-		}*/
+			throw new Exception('Token has expired!');
+		}
+
+		*/
 
 	}
