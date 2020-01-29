@@ -19,7 +19,6 @@
 
 	use Exception;
 	use InvalidArgumentException;
-	use ReallySimpleJWT\Token;
 
 	//require 'vendor/autoload.php';
 
@@ -85,12 +84,10 @@
 		 */
 		protected $auth_config = [
 			'company'   => [
-				'timestamp'     => null,
 				'client_id'     => null,
 				'client_secret' => null
 			],
 			'applicant' => [
-				'timestamp'       => null,
 				'applicant_email' => null,
 			]
 		];
@@ -145,8 +142,8 @@
 			'get_jobs'         => 'rest_jobs/index',
 			'get_job'          => 'rest_jobs/view',
 			'add_applicant'    => 'rest_applicants/add',
-			'upload_documents' => 'rest_applicants/upload',
-			'delete_documents' => 'rest_applicants/deleteFile',
+			'upload_documents' => 'rest_applicants/uploadDocument',
+			'delete_documents' => 'rest_applicants/deleteDocument',
 		];
 
 		function __construct(array $config) {
@@ -275,7 +272,7 @@
 
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 
-			if($result['success'] && $this->validateToken($result['token'])) {
+			if($result['success']) {
 				$this->auth['company']['token'] = $result['token'];
 				$this->auth['company']['data']  = $result['data'];
 
@@ -285,26 +282,24 @@
 			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
 		}
 
-		/**
-		 *  Checks if the JWT token is valid.
-		 *
-		 * @return bool
-		 *
-		 */
-		public function validateToken(?string $token): bool {
-			$result = Token::validate($token, $this->auth_config['company']['client_secret']);
-
-			return $result;
-		}
 
 		/**
 		 *  Find jobs from SCOPE based on the pre defined filter values.
 		 *
 		 * @return array
-		 *
+		 * @throws Exception
 		 */
 		public function getJobs(): array {
-			return $this->curlGet($this->url['get_jobs'], null, $this->filter);
+			$result = $this->curlGet($this->url['get_jobs'], null, $this->filter);
+
+			if($result['status_code'] === 401) {
+
+				if($this->authenticateCompany()['success']) {
+					$this->getJobs();
+				}
+			}
+
+			return $result;
 		}
 
 		/**
@@ -330,89 +325,69 @@
 
 			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '/' . $lng;
 
-			return $this->curlGet($url, null);
-		}
+			$result = $this->curlGet($url, null);
 
-		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
-			$response = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
-
-			if(!$response['success']) {
-				if(!in_array($response['error']['detail'], ['Duplicate application', 'Validation error'])) {
-					throw new Exception('Error while trying to  save applicant. Url: ' . $this->url['add_applicant'] . '/' . $jobId . ' Error message: ' . $response['error']['message']);
+			if($result['status_code'] === 401) {
+				if($this->authenticateCompany()['success']) {
+					$this->getJob($jobId, $companyLocationId, $lng);
 				}
-			}
-
-			return $response;
-		}
-
-		/*
-		 * This function should only be called if you want to upload the applicant documents before submitting his personal data.
-		 * After the first successful upload, the api will response with the created applicantId.
-		 * If you want to upload a second document, use the applicantId.
-		 */
-		public function uploadDocumentBeforeApplicantData($data = null, $documentType = null, $jobId = null, $applicantId = null, $companyLocationId = null) {
-			$result = [
-				'success' => false
-			];
-
-			if(!empty($data) && !empty($documentType) && !empty($jobId) && !empty($companyLocationId)) {
-
-				if(!$this->validateToken()) {
-					$this->authenticateCompany();
-				}
-
-				$dataString = json_encode($data);
-
-				$headr[] = "Token: " . $this->auth['company']['token'];
-				$headr[] = "Content-Type: application/json";
-
-				$url = !empty($applicantId)
-					? $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId . '/' . $applicantId
-					: $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId;
-
-				$curl = curl_init($url);
-
-				curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
-				curl_setopt($curl, CURLOPT_HTTPHEADER, $headr);
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
-				$result = json_decode(curl_exec($curl), true);
-
-				curl_close($curl);
 			}
 
 			return $result;
 		}
 
-		public function deleteDocument($name = null, $applicantId = null, $companyLocationId = null, $docType = null) {
+		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
+			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
 
-			$result = [
-				'success' => false
-			];
-
-			if(!empty($name) && !empty($applicantId) && !empty($docType)) {
-
-				if(!$this->validateToken($this->auth['company']['token'])) {
-					$this->authenticateCompany();
+			if($result['status_code'] === 401) {
+				if($this->authenticateCompany()['success']) {
+					$this->saveApplicant($data, $jobId, $companyLocationId);
 				}
+			}
 
-				$dataString = json_encode([]);
+			return $result;
+		}
 
-				$headr[] = "Token: " . $this->auth['company']['token'];
-				$headr[] = "Content-Type: application/json";
+		/**
+		 * Uploads an applicant documents before or after submitting his data.
+		 * After the first successful upload, the api will response with the created applicantId.
+		 * If you want to upload a second document, use the applicantId
+		 *
+		 * @param array  $data              : The document data.
+		 * @param string $documentType      : The document type (picture | covering_letter | cv | certificate | other).
+		 * @param int    $jobId             : The job ID.
+		 * @param int    $companyLocationId : The ID of the company location that belongs to the job.
+		 * @param string $applicantId       : The applicant ID.
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
 
-				$url = $this->scope_url . $this->url['delete_documents'] . '/' . $name . '/' . $applicantId . '/' . $companyLocationId . '/' . $docType;
+		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
 
-				$curl = curl_init($url);
+			if(empty($data)) {
+				throw new Exception('Missing applicant data');
+			}
+			if(empty($documentType)) {
+				throw new Exception('Missing document type parameter');
+			}
+			if(empty($jobId)) {
+				throw new Exception('Missing job id parameter');
+			}
+			if(empty($companyLocationId)) {
+				throw new Exception('Missing company location id parameter');
+			}
 
-				curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
-				curl_setopt($curl, CURLOPT_HTTPHEADER, $headr);
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+			$url = !empty($applicantId)
+				? $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId . '/' . $applicantId
+				: $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId;
 
-				$result = json_decode(curl_exec($curl), true);
-				curl_close($curl);
+			$result = $this->curlPost($url, null, $data);
+
+			if($result['status_code'] === 401) {
+				if($this->authenticateCompany()['success']) {
+					$this->uploadDocument($data, $documentType, $jobId, $companyLocationId, $applicantId);
+				}
 			}
 
 			return $result;
@@ -504,37 +479,6 @@
 			return $list;
 		}
 
-		public function build_http_query($query) {
-
-			$query_array = [];
-
-			foreach($query as $key => $key_value) {
-				if(is_array($key_value)) {
-					foreach($key_value as $k => $v) {
-						if(!empty($v) || $v === false) {
-							if(is_bool($v)) {
-								$v = $v ? 'true' : 'false';
-							} else {
-								$v = urlencode($v);
-							}
-							$query_array[] = urlencode($key) . '=' . $v;
-						}
-					}
-				} else {
-					if(!empty($key_value) || $key_value === false) {
-						if(is_bool($key_value)) {
-							$key_value = $key_value ? 'true' : 'false';
-						} else {
-							$key_value = urlencode($key_value);
-						}
-						$query_array[] = urlencode($key) . '=' . $key_value;
-					}
-				}
-			}
-
-			return implode('&', $query_array);
-		}
-
 		public function getCurrentPageURL(string $part = 'full'): string {
 			$url = $part === 'full'
 				? $this->analytics['current_page']['scheme'] . '://' .
@@ -554,10 +498,6 @@
 		}
 
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
-
-			if(!$this->validateToken($this->auth['company']['token'])) {
-				$this->authenticateCompany();
-			}
 
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['company']['token'];
@@ -619,7 +559,38 @@
 			return $text;
 		}
 
-		/*public function setApplicantAuthConfig(string $email, string $password): void {
+		/*
+		public function build_http_query($query) {
+
+			$query_array = [];
+
+			foreach($query as $key => $key_value) {
+				if(is_array($key_value)) {
+					foreach($key_value as $k => $v) {
+						if(!empty($v) || $v === false) {
+							if(is_bool($v)) {
+								$v = $v ? 'true' : 'false';
+							} else {
+								$v = urlencode($v);
+							}
+							$query_array[] = urlencode($key) . '=' . $v;
+						}
+					}
+				} else {
+					if(!empty($key_value) || $key_value === false) {
+						if(is_bool($key_value)) {
+							$key_value = $key_value ? 'true' : 'false';
+						} else {
+							$key_value = urlencode($key_value);
+						}
+						$query_array[] = urlencode($key) . '=' . $key_value;
+					}
+				}
+			}
+
+			return implode('&', $query_array);
+		}
+		 public function setApplicantAuthConfig(string $email, string $password): void {
 			if(empty($email)) {
 				throw new InvalidArgumentException('Missing email parameter.');
 			}
@@ -678,5 +649,4 @@
 		}
 
 		*/
-
 	}

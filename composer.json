@@ -5,7 +5,8 @@
   "keywords": [
     "scope",
     "recruiting",
-    "artrevolver"
+    "artrevolver",
+    "SCOPE-Recruiting"
   ],
   "license": "WTFPL",
   "authors": [
@@ -20,8 +21,7 @@
   ],
   "type": "project",
   "require": {
-    "php": ">=7.1",
-    "rbdwllr/reallysimplejwt": "^2.0"
+    "php": ">=7.1"
   },
   "autoload": {
     "psr-4": {
