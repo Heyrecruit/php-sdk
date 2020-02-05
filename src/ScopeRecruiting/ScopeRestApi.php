@@ -20,8 +20,6 @@
 	use Exception;
 	use InvalidArgumentException;
 
-	//require 'vendor/autoload.php';
-
 	/**
 	 * Class ScopeRestApi
 	 *
@@ -53,43 +51,25 @@
 		];
 
 		/**
-		 * Holds company (client) and applicant auth information.
-		 *
-		 * array['company']         array Holds client auth token, expiration date and company data.
-		 *      ['applicant']       array Holds applicant auth token, expiration date and applicant data.
-		 *
-		 *
-		 * @var array $auth (See above)
+		 * @var $auth array  Holds auth information.
 		 *
 		 */
 		protected $auth = [
-			'company'   => [],
-			'applicant' => []
+			'token' => null
 		];
 
 		/**
-		 * Auth configuration for company and applicant.
+		 * Auth configuration.
 		 *
-		 * array['company']                     array Holds the company auth for requesting a authorization token.
-		 *          ['timestamp']               int Timestamp of the auth request.
-		 *          ['client_id']               int The company id of a registered SCOPE client.
-		 *          ['client_secret']           string The company secret.
-		 *      ['applicant']                   array Holds the company auth for requesting a authorization token.
-		 *          ['timestamp']               int Timestamp of the auth request.
-		 *          ['applicant_email']         string E-Mail address of an applicant that has applied by the company.
-		 *
+		 * array    ['client_id']       int The company id of a registered SCOPE client.
+		 *          ['client_secret']   string The company secret.
 		 *
 		 * @var array $auth_config (See above)
 		 *
 		 */
 		protected $auth_config = [
-			'company'   => [
-				'client_id'     => null,
-				'client_secret' => null
-			],
-			'applicant' => [
-				'applicant_email' => null,
-			]
+			'client_id'     => null,
+			'client_secret' => null
 		];
 
 		/**
@@ -122,8 +102,7 @@
 		/**
 		 * SCOPE API request urls.
 		 *
-		 * array['company_auth']        string Company authentication and requesting an authorization token url.
-		 *      ['applicant_auth']      string Applicant authentication and requesting an authorization token url.
+		 * array['auth']                string Authentication and requesting an authorization token url.
 		 *      ['get_company']         string Get company data url.
 		 *      ['get_jobs']            string Get jobs data url.
 		 *      ['get_job']             string Get single job data url.
@@ -136,14 +115,14 @@
 		 *
 		 */
 		private $url = [
-			'company_auth'     => 'rest_companies/auth',
-			'applicant_auth'   => 'rest_applicants/auth',
-			'get_company'      => 'rest_companies/view',
-			'get_jobs'         => 'rest_jobs/index',
-			'get_job'          => 'rest_jobs/view',
-			'add_applicant'    => 'rest_applicants/add',
-			'upload_documents' => 'rest_applicants/uploadDocument',
-			'delete_documents' => 'rest_applicants/deleteDocument',
+			'auth'                      => 'rest_accounts/auth',
+			'get_company'               => 'rest_companies/view',
+			'get_company_by_sub_domain' => 'rest_companies/viewBySubDomain',
+			'get_jobs'                  => 'rest_jobs/index',
+			'get_job'                   => 'rest_jobs/view',
+			'add_applicant'             => 'rest_applicants/add',
+			'upload_documents'          => 'rest_applicants/uploadDocument',
+			'delete_documents'          => 'rest_applicants/deleteDocument',
 		];
 
 		function __construct(array $config) {
@@ -171,21 +150,22 @@
 			$this->analytics['current_page'] = $urlObject;
 			$this->analytics['referrer']     = $urlObject;
 
-			$this->setCompanyAuthConfig($config);
-			$this->authenticateCompany();
+			$this->setAuthConfig($config);
+			$this->authenticate();
+			$this->authenticate();
 			$this->setCurrentPageURL();
 		}
 
 		/**
-		 *  Sets company auth data for requesting an JWT access token
+		 *  Sets auth data for requesting an JWT access token
 		 *
-		 *  array['SCOPE_CLIENT_ID']         int The company id of a registered SCOPE client.
-		 *       ['SCOPE_CLIENT_SECRET']     string Applicant authentication and requesting an authorization token url.
+		 * @param $config        array ['SCOPE_CLIENT_ID']         int The client id of a registered SCOPE client.
+		 *                       ['SCOPE_CLIENT_SECRET']     string The client secret of a registered SCOPE client.
 		 *
 		 * @return void
 		 *
 		 */
-		public function setCompanyAuthConfig(array $config): void {
+		public function setAuthConfig(array $config): void {
 			if(!isset($config['SCOPE_CLIENT_ID'])) {
 				throw new InvalidArgumentException('Missing SCOPE_CLIENT_ID parameter.');
 			}
@@ -193,10 +173,33 @@
 				throw new InvalidArgumentException('Missing SCOPE_CLIENT_SECRET parameter.');
 			}
 
-			$this->auth_config['company'] = [
+			$this->auth_config = [
 				'client_id'     => $config['SCOPE_CLIENT_ID'],
 				'client_secret' => $config['SCOPE_CLIENT_SECRET']
 			];
+		}
+
+		/**
+		 *  Swaps a client_id and client_secret for an JWT auth token.
+		 *
+		 * @return array
+		 * @throws Exception
+		 *
+		 */
+		public function authenticate(): array {
+			$curl = curl_init($this->scope_url . $this->url['auth']);
+			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config);
+
+			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+
+			if($result['success']) {
+				$this->auth['token'] = $result['token'];
+
+				return $result;
+			}
+
+			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
 		}
 
 		/**
@@ -212,6 +215,8 @@
 
 		/**
 		 *  Sets the job filter data submitted with get jobs request
+		 *
+		 * @param $queryParams  String
 		 *
 		 * @return void
 		 *
@@ -249,6 +254,8 @@
 		/**
 		 *  Sets the current referrer url for analytics
 		 *
+		 * @param $url  String|NULL
+		 *
 		 * @return void
 		 *
 		 */
@@ -259,42 +266,66 @@
 		}
 
 		/**
-		 *  Swaps a client_id and client_secret for an JWT auth token and gets the company data
+		 *  Get company data.
+		 *
+		 * @param $companyId int|null
 		 *
 		 * @return array
 		 * @throws Exception
-		 *
 		 */
-		public function authenticateCompany(): array {
-			$curl = curl_init($this->scope_url . $this->url['company_auth']);
-			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config['company']);
+		public function getCompany(?int $companyId = null): array {
 
-			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+			$url = !empty($companyId) ? $this->url['get_company'] . '/' . $companyId : $this->url['get_company'];
 
-			if($result['success']) {
-				$this->auth['company']['token'] = $result['token'];
-				$this->auth['company']['data']  = $result['data'];
+			$result = $this->curlGet($url, null);
 
-				return $result;
+			if($result['status_code'] === 401) {
+
+				if($this->authenticate()['success']) {
+					$this->getCompany($companyId);
+				}
 			}
 
-			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
+			return $result;
 		}
 
+		/**
+		 *  Get company data by sub domain
+		 *
+		 * @param $subDomain string
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function getCompanyBySubDomain(string $subDomain = ''): array {
+
+			$result = $this->curlGet($this->url['get_company_by_sub_domain'] . '/' . $subDomain, null);
+
+			if($result['status_code'] === 401) {
+
+				if($this->authenticate()['success']) {
+					$this->getCompanyBySubDomain($subDomain);
+				}
+			}
+
+			return $result;
+		}
 
 		/**
 		 *  Find jobs from SCOPE based on the pre defined filter values.
 		 *
+		 * @param $companyId int|null
+		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getJobs(): array {
-			$result = $this->curlGet($this->url['get_jobs'], null, $this->filter);
+		public function getJobs(?int $companyId = null): array {
+			$url    = !empty($companyId) ? $this->url['get_jobs'] . '/' . $companyId : $this->url['get_jobs'];
+			$result = $this->curlGet($url, null, $this->filter);
 
 			if($result['status_code'] === 401) {
 
-				if($this->authenticateCompany()['success']) {
+				if($this->authenticate()['success']) {
 					$this->getJobs();
 				}
 			}
@@ -328,7 +359,7 @@
 			$result = $this->curlGet($url, null);
 
 			if($result['status_code'] === 401) {
-				if($this->authenticateCompany()['success']) {
+				if($this->authenticate()['success']) {
 					$this->getJob($jobId, $companyLocationId, $lng);
 				}
 			}
@@ -340,7 +371,7 @@
 			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
 
 			if($result['status_code'] === 401) {
-				if($this->authenticateCompany()['success']) {
+				if($this->authenticate()['success']) {
 					$this->saveApplicant($data, $jobId, $companyLocationId);
 				}
 			}
@@ -362,7 +393,6 @@
 		 * @return array
 		 * @throws Exception
 		 */
-
 		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
 
 			if(empty($data)) {
@@ -385,7 +415,7 @@
 			$result = $this->curlPost($url, null, $data);
 
 			if($result['status_code'] === 401) {
-				if($this->authenticateCompany()['success']) {
+				if($this->authenticate()['success']) {
 					$this->uploadDocument($data, $documentType, $jobId, $companyLocationId, $applicantId);
 				}
 			}
@@ -393,46 +423,36 @@
 			return $result;
 		}
 
-		public function getGoogleTagCode(): array {
+		public function getGoogleTagCode(?string $publicId = ''): array {
 			$tagCode = [
 				'head' => '',
 				'body' => ''
 			];
 
-			if(isset($this->auth['company']['data']['CompanySetting'])) {
-				if(!empty($this->auth['company']['data']['CompanySetting']['google_tag_public_id'])) {
-					$tagCode['head'] =
-						"<!-- Google Tag Manager -->" .
-						"<script> (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': " .
-						"new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0], " .
-						"j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src= " .
-						"'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f); " .
-						"})(window,document,'script','dataLayer', '" .
-						$this->auth['company']['data']['CompanySetting']['google_tag_public_id'] . "');</script> " .
-						"<!-- End Google Tag Manager -->";
+			if($this->analytics['active'] && !empty($publicId)) {
+				$tagCode['head'] =
+					"<!-- Google Tag Manager -->" .
+					"<script> (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': " .
+					"new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0], " .
+					"j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src= " .
+					"'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f); " .
+					"})(window,document,'script','dataLayer', '" .
+					$publicId . "');</script> " .
+					"<!-- End Google Tag Manager -->";
 
-					$tagCode['body'] =
-						'<!-- Google Tag Manager (noscript) -->' .
-						'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' .
-						$this->auth['company']['data']['CompanySetting']['google_tag_public_id'] . '" ' .
-						'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> ' .
-						'<!-- End Google Tag Manager (noscript) -->';
-				} elseif($this->analytics['active']) {
-					throw new Exception('Analytics is set to true but no GTM public id found in company settings.');
-				}
-			} elseif($this->analytics['active']) {
-				throw new Exception('Auth company data is empty.');
+				$tagCode['body'] =
+					'<!-- Google Tag Manager (noscript) -->' .
+					'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' .
+					$publicId . '" ' .
+					'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> ' .
+					'<!-- End Google Tag Manager (noscript) -->';
 			}
 
 			return $tagCode;
 		}
 
-		public function getCompanyAuthData(): array {
-			return $this->auth['company'];
-		}
-
-		public function getApplicantAuthData(): array {
-			return $this->auth['applicant'];
+		public function getAuthData(): array {
+			return $this->auth;
 		}
 
 		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $country = true): string {
@@ -500,7 +520,7 @@
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
 
 			if(empty($header)) {
-				$header[] = "Authorization: Bearer " . $this->auth['company']['token'];
+				$header[] = "Authorization: Bearer " . $this->auth['token'];
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
 
@@ -512,7 +532,6 @@
 
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 
 			curl_close($curl);
@@ -522,8 +541,8 @@
 
 		private function curlPost(string $url, ?array $header = [], array $data = []): array {
 
-			if(!$this->validateToken($this->auth['company']['token'])) {
-				$this->authenticateCompany();
+			if(!$this->validateToken($this->auth['token'])) {
+				$this->authenticate();
 			}
 
 			if($this->analytics['active']) {
@@ -534,7 +553,7 @@
 			$dataString = json_encode($data);
 
 			if(empty($header)) {
-				$header[] = "Authorization: Bearer " . $this->auth['company']['token'];
+				$header[] = "Authorization: Bearer " . $this->auth['token'];
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
 
