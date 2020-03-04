@@ -96,7 +96,8 @@
 			'department'     => [],
 			'employment'     => [],
 			'address'        => null,
-			'internal_title' => []
+			'internal_title' => [],
+			'preview'        => false
 		];
 
 		/**
@@ -151,7 +152,6 @@
 			$this->analytics['referrer']     = $urlObject;
 
 			$this->setAuthConfig($config);
-			$this->authenticate();
 			$this->authenticate();
 			$this->setCurrentPageURL();
 		}
@@ -231,6 +231,7 @@
 				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
 				// Only one address allowed
 				$this->filter['address'] = !empty($this->filter['address']) ? $this->filter['address'][0] : null;
+				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] == true ? 1 : 0;
 			}
 		}
 
@@ -320,7 +321,8 @@
 		 * @throws Exception
 		 */
 		public function getJobs(?int $companyId = null): array {
-			$url    = !empty($companyId) ? $this->url['get_jobs'] . '/' . $companyId : $this->url['get_jobs'];
+			$url = !empty($companyId) ? $this->url['get_jobs'] . '/' . $companyId : $this->url['get_jobs'];
+
 			$result = $this->curlGet($url, null, $this->filter);
 
 			if($result['status_code'] === 401) {
@@ -336,14 +338,13 @@
 		/**
 		 *  Get one job from SCOPE.
 		 *
-		 * @param int    $jobId             : The ID of the job to get from SCOPE.
-		 * @param int    $companyLocationId : The ID of the company location that belongs to the job.
-		 * @param string $lng               : The language shortcut.
+		 * @param int $jobId             : The ID of the job to get from SCOPE.
+		 * @param int $companyLocationId : The ID of the company location that belongs to the job.
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getJob(?int $jobId = null, ?int $companyLocationId = null, string $lng = ''): array {
+		public function getJob(?int $jobId = null, ?int $companyLocationId = null): array {
 
 			if(empty($jobId)) {
 				throw new Exception('Missing job id parameter');
@@ -352,15 +353,13 @@
 				throw new Exception('Missing company location id parameter');
 			}
 
-			$lng = empty($lng) ? $this->filter['language'] : $lng;
-
-			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '/' . $lng;
+			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '?preview=' . $this->filter['preview'];
 
 			$result = $this->curlGet($url, null);
 
 			if($result['status_code'] === 401) {
 				if($this->authenticate()['success']) {
-					$this->getJob($jobId, $companyLocationId, $lng);
+					$this->getJob($jobId, $companyLocationId);
 				}
 			}
 
@@ -524,14 +523,18 @@
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
 
-			$query['ip'] = urlencode($_SERVER['REMOTE_ADDR']);
+			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
+			$query['language'] = $this->filter['language'];
 
 			$queryData = http_build_query($query);
 
-			$curl = curl_init($this->scope_url . $url . '?' . $queryData);
+			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
+
+			$curl = curl_init($this->scope_url . $url . $query);
 
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 
 			curl_close($curl);
