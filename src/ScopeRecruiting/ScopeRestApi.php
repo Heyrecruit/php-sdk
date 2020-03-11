@@ -534,7 +534,6 @@
 
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 
 			curl_close($curl);
@@ -544,21 +543,12 @@
 
 		private function curlPost(string $url, ?array $header = [], array $data = []): array {
 
-			if(!$this->validateToken($this->auth['token'])) {
-				$this->authenticate();
-			}
-
-			if($this->analytics['active']) {
-				$data += $this->analytics;
-				unset($data['active']);
-			}
-
-			$dataString = json_encode($data);
-
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
+
+			$dataString = json_encode($data);
 
 			$curl = curl_init($this->scope_url . $url);
 			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
