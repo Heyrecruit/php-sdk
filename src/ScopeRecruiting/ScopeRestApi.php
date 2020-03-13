@@ -537,7 +537,7 @@
 			$result = curl_exec($curl);
 
 			if(!empty($result)){
-				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+				$result = json_decode($this->removeUtf8Bom($result), true);
 			}else{
 				$result = [
 					'success'     => false,
