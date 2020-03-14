@@ -534,21 +534,7 @@
 
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-			$result = curl_exec($curl);
-
-			if(!empty($result)){
-				$result = json_decode($this->removeUtf8Bom($result), true);
-			}else{
-				$result = [
-					'success'     => false,
-					'status_code' => 404,
-					'error'       => [
-						"detail"  => 'Not Found',
-						"meaning" => 'The object referenced by the path does not exist.',
-						"message" => '',
-					]
-				];
-			}
+			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
 
 			curl_close($curl);
 
