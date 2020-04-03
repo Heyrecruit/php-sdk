@@ -548,6 +548,8 @@
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
 
+			$data += $this->analytics;
+
 			$dataString = json_encode($data);
 
 			$curl = curl_init($this->scope_url . $url);
