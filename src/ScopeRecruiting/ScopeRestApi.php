@@ -75,29 +75,31 @@
 		/**
 		 * Job filter data submitted with get jobs request.
 		 *
-		 * array['id']                  int Job id.
-		 *      ['applicant_id']        string Applicant id. When given and found, form questions are pre filled with applicant data.
-		 *      ['language']            string The language shortcut for strings to be returned from scope.
-		 *      ['location']            int Company location id.
-		 *      ['department']          string Job department (e.g. Software development).
-		 *      ['employment']          string Job employment (e.g. full time, part time)
-		 *      ['address']             string Job address.
-		 *      ['internal_title']      string Internal job title.
+		 * array['id']                      int Job id.
+		 *      ['applicant_id']            string Applicant id. When given and found, form questions are pre filled with applicant data.
+		 *      ['language']                string The language shortcut for strings to be returned from scope.
+		 *      ['location']                int Company location id.
+		 *      ['department']              string Job department (e.g. Software development).
+		 *      ['employment']              string Job employment (e.g. full time, part time)
+		 *      ['address']                 string Job address.
+		 *      ['area_search_distance']    int Area search distance for address. Default 60000 => 60 km
+		 *      ['internal_title']          string Internal job title.
 		 *
 		 *
 		 * @var array $filter (See above)
 		 *
 		 */
 		private $filter = [
-			'id'             => [],
-			'applicant_id'   => null,
-			'language'       => 'de',
-			'location'       => [],
-			'department'     => [],
-			'employment'     => [],
-			'address'        => null,
-			'internal_title' => [],
-			'preview'        => false
+			'id'                   => [],
+			'applicant_id'         => null,
+			'language'             => 'de',
+			'location'             => [],
+			'department'           => [],
+			'employment'           => [],
+			'internal_title'       => [],
+			'address'              => null,
+			'area_search_distance' => 60000, // 60 km
+			'preview'              => false
 		];
 
 		/**
