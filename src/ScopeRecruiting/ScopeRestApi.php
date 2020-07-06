@@ -249,7 +249,11 @@
 				$pageURL .= "s";
 			}
 
-			$pageURL .= "://" . $_SERVER["SERVER_NAME"] . $_SERVER["REQUEST_URI"];
+			if(isset($_SERVER["HTTP_HOST"])) {
+				$pageURL .= "://" . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
+			} else {
+				$pageURL .= "://" . $_SERVER["SERVER_NAME"] . $_SERVER["REQUEST_URI"];
+			}
 
 			$this->analytics['current_page'] = parse_url($pageURL) + $this->analytics['current_page'];
 		}
