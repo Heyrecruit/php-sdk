@@ -495,7 +495,7 @@
 
 					foreach($employments as $k => $v) {
 						if(!in_array($v, $list)) {
-							$list[strtolower($v)] = $v;
+							$list[trim(strtolower($v), " ")] = $v;
 						}
 					}
 				}
