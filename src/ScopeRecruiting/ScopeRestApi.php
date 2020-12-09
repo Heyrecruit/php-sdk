@@ -211,8 +211,8 @@
 		 *
 		 */
 		public function setAnalyticsCookie(): void {
-			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), strtotime('+24 hours'));
-			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), strtotime('+24 hours'));
+			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), strtotime('+24 hours'), '/');
+			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), strtotime('+24 hours'), '/');
 		}
 
 		/**
