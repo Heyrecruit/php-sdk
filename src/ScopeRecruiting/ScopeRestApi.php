@@ -268,7 +268,7 @@
 		 *
 		 */
 		public function setReferrer(?string $url): void {
-			if(!empty($url) && strpos($url, $this->analytics['current_page']['host']) === false) {
+			if(!empty($url)) {
 				$this->analytics['referrer'] = parse_url($url) + $this->analytics['referrer'];
 			}
 		}
