@@ -257,10 +257,6 @@
 			}
 
 			$this->analytics['current_page'] = parse_url($pageURL) + $this->analytics['current_page'];
-
-			if(strpos($this->analytics['current_page']['path'], '.map') !== false){
-				$this->analytics['current_page']['path'] = '/';
-			}
 		}
 
 		/**
