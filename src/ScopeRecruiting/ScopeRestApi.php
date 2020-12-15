@@ -211,9 +211,11 @@
 		 *
 		 */
 		public function setAnalyticsCookie(): void {
-			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), strtotime('+24 hours'), "/; SameSite=None; Secure");
-			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), strtotime('+24 hours'), "/; SameSite=None; Secure");
+			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/; SameSite=None; Secure");
+			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/");
 
+			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/; SameSite=None; Secure");
+			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/");
 		}
 
 		/**
@@ -520,6 +522,12 @@
 			print_r($data);
 			echo "</pre>";
 			die;
+		}
+
+		public function consoleLog($data) {
+			echo '<script>';
+			echo 'console.log(' . json_encode($data) . ')';
+			echo '</script>';
 		}
 
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
