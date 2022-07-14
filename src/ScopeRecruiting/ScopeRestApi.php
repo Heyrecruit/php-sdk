@@ -126,6 +126,7 @@
 			'add_applicant'             => 'rest_applicants/add',
 			'upload_documents'          => 'rest_applicants/uploadDocument',
 			'delete_documents'          => 'rest_applicants/deleteDocument',
+            'check_subdomain'           => 'rest_companies/checkSubDomain'
 		];
 
 		function __construct(array $config) {
@@ -154,7 +155,6 @@
 			$this->analytics['referrer']     = $urlObject;
 
 			$this->setAuthConfig($config);
-			$this->authenticate();
 			$this->setCurrentPageURL();
 		}
 
@@ -204,6 +204,33 @@
 			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
 		}
 
+        public function checkSubDomain(string $subDomain): bool
+        {
+
+            $headers = array(
+                'Accept: application/json',
+                'Content-Type: application/json',
+
+            );
+
+            $curl = curl_init();
+            curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($curl, CURLOPT_URL,$this->scope_url . $this->url['check_subdomain'] . '/' . $subDomain);
+            curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($curl, CURLOPT_HEADER, true);    // we want headers
+            curl_setopt($curl, CURLOPT_NOBODY, true);    // we don't need body
+            curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
+            $output = curl_exec($curl);
+            $httpcode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            curl_close($curl);
+            if ($httpcode === 204) {
+                return true;
+            }
+            return false;
+        }
+
+
+
 		/**
 		 *  Sets tracking information (analytics array) to a visitors cookie.
 		 *
@@ -211,11 +238,41 @@
 		 *
 		 */
 		public function setAnalyticsCookie(): void {
-			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/; SameSite=None; Secure");
-			setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/");
+            if(isset($this->analytics['current_page']['host'])) {
 
-			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/; SameSite=None; Secure");
-			setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/");
+                /* setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']),[
+                         'expires' => time() + 3600,
+                         'path' => '/',
+                         'domain' => $this->analytics['current_page']['host'],
+                         'secure' => true,
+                         'httponly' => false,
+                         'samesite' => 'None',
+                     ]
+                 );*/
+                setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), [
+                        'expires' => time() + 3600,
+                        'path' => '/',
+                        'domain' => $this->analytics['current_page']['host']
+                    ]
+                );
+
+                /* setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']),[
+                         'expires' => time() + 3600,
+                         'path' => '/',
+                         'domain' => $this->analytics['current_page']['host'],
+                         'secure' => true,
+                         'httponly' => false,
+                         'samesite' => 'None',
+                     ]
+                 );*/
+                setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), [
+
+                        'expires' => time() + 3600,
+                        'path' => '/',
+                        'domain' => $this->analytics['current_page']['host']
+                    ]
+                );
+            }
 		}
 
 		/**

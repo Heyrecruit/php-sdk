@@ -1,4 +1,4 @@
-# SCOPE Recruiting SDK for PHP (v7)
+# SCOPE Recruiting SDK for PHP (v7.4)
 
 This repository contains the PHP SDK that allows you to access the SCOPE Recruiting Platform from your PHP app.
 
