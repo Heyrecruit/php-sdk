@@ -1,5 +1,5 @@
 <?php
-
+	
 	/**
 	 * Class ScopeRestApi
 	 *
@@ -12,27 +12,26 @@
 	 * @license       http://opensource.org/licenses/mit-license.php MI
 	 *
 	 */
-
 	declare(strict_types=1);
-
+	
 	namespace ScopeRecruiting;
-
+	
 	use Exception;
 	use InvalidArgumentException;
-
+	
 	/**
 	 * Class ScopeRestApi
 	 *
 	 */
 	class ScopeRestApi {
-
+		
 		/**
 		 * API request url.
 		 *
 		 * @var string $scope_url
 		 */
 		public $scope_url;
-
+		
 		/**
 		 * Holds visitor tracking information.
 		 *
@@ -49,15 +48,16 @@
 			'current_page' => [],
 			'referrer'     => [],
 		];
-
+		
 		/**
 		 * @var $auth array  Holds auth information.
 		 *
 		 */
 		protected $auth = [
-			'token' => null
+			'token' => null,
+			'expiration' => null,
 		];
-
+		
 		/**
 		 * Auth configuration.
 		 *
@@ -71,7 +71,7 @@
 			'client_id'     => null,
 			'client_secret' => null
 		];
-
+		
 		/**
 		 * Job filter data submitted with get jobs request.
 		 *
@@ -101,7 +101,7 @@
 			'area_search_distance' => 60000, // 60 km
 			'preview'              => false
 		];
-
+		
 		/**
 		 * SCOPE API request urls.
 		 *
@@ -126,38 +126,38 @@
 			'add_applicant'             => 'rest_applicants/add',
 			'upload_documents'          => 'rest_applicants/uploadDocument',
 			'delete_documents'          => 'rest_applicants/deleteDocument',
-            'check_subdomain'           => 'rest_companies/checkSubDomain'
 		];
-
+		
 		function __construct(array $config) {
 			if(empty($config)) {
 				throw new InvalidArgumentException('No configuration settings submitted.');
 			}
-
+			
 			if(!isset($config['SCOPE_URL'])) {
 				throw new InvalidArgumentException('Missing SCOPE_URL parameter.');
 			}
-
+			
 			if(isset($config['GA_TRACKING'])) {
 				$this->analytics['active'] = filter_var($config['GA_TRACKING'], FILTER_VALIDATE_BOOLEAN);
 			}
-
+			
 			$this->scope_url = $config['SCOPE_URL'];
-
+			
 			$urlObject = [
 				'scheme' => null,
 				'host'   => null,
 				'path'   => null,
 				'query'  => null
 			];
-
+			
 			$this->analytics['current_page'] = $urlObject;
 			$this->analytics['referrer']     = $urlObject;
-
+			
 			$this->setAuthConfig($config);
+			$this->authenticate();
 			$this->setCurrentPageURL();
 		}
-
+		
 		/**
 		 *  Sets auth data for requesting an JWT access token
 		 *
@@ -174,13 +174,13 @@
 			if(!isset($config['SCOPE_CLIENT_SECRET'])) {
 				throw new InvalidArgumentException('Missing SCOPE_CLIENT_SECRET parameter.');
 			}
-
+			
 			$this->auth_config = [
 				'client_id'     => $config['SCOPE_CLIENT_ID'],
 				'client_secret' => $config['SCOPE_CLIENT_SECRET']
 			];
 		}
-
+		
 		/**
 		 *  Swaps a client_id and client_secret for an JWT auth token.
 		 *
@@ -189,48 +189,40 @@
 		 *
 		 */
 		public function authenticate(): array {
-			$curl = curl_init($this->scope_url . $this->url['auth']);
-			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config);
-
-			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
+			
+			if(
+				!isset($_SESSION['HEY_AUTH']) ||
+				empty($_SESSION['HEY_AUTH']['token']) ||
+				time() >  $_SESSION['HEY_AUTH']['expiration']
+			) {
+				
+				$curl = curl_init($this->scope_url . $this->url['auth']);
+				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config);
+				
+				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+				
+				if($result['success']) {
+					$this->auth['token'] = $result['token'];
+					$this->auth['expiration'] = $result['expiration'];
+				}
+			}else{
+				
+				$this->auth['token']      = $_SESSION['HEY_AUTH']['token'];
+				$this->auth['expiration'] = $_SESSION['HEY_AUTH']['expiration'];
+				
+				$result['success']      = true;
+				$result['status_code']  = 200;
+				$result['error']        = false;
+			}
+			
 			if($result['success']) {
-				$this->auth['token'] = $result['token'];
-
 				return $result;
 			}
-
+			
 			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
 		}
-
-        public function checkSubDomain(string $subDomain): bool
-        {
-
-            $headers = array(
-                'Accept: application/json',
-                'Content-Type: application/json',
-
-            );
-
-            $curl = curl_init();
-            curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-            curl_setopt($curl, CURLOPT_URL,$this->scope_url . $this->url['check_subdomain'] . '/' . $subDomain);
-            curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($curl, CURLOPT_HEADER, true);    // we want headers
-            curl_setopt($curl, CURLOPT_NOBODY, true);    // we don't need body
-            curl_setopt( $curl, CURLOPT_HTTPGET, 1 );
-            $output = curl_exec($curl);
-            $httpcode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-            curl_close($curl);
-            if ($httpcode === 204) {
-                return true;
-            }
-            return false;
-        }
-
-
-
+		
 		/**
 		 *  Sets tracking information (analytics array) to a visitors cookie.
 		 *
@@ -238,43 +230,28 @@
 		 *
 		 */
 		public function setAnalyticsCookie(): void {
-            if(isset($this->analytics['current_page']['host'])) {
-
-                /* setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']),[
-                         'expires' => time() + 3600,
-                         'path' => '/',
-                         'domain' => $this->analytics['current_page']['host'],
-                         'secure' => true,
-                         'httponly' => false,
-                         'samesite' => 'None',
-                     ]
-                 );*/
-                setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), [
-                        'expires' => time() + 3600,
-                        'path' => '/',
-                        'domain' => $this->analytics['current_page']['host']
-                    ]
-                );
-
-                /* setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']),[
-                         'expires' => time() + 3600,
-                         'path' => '/',
-                         'domain' => $this->analytics['current_page']['host'],
-                         'secure' => true,
-                         'httponly' => false,
-                         'samesite' => 'None',
-                     ]
-                 );*/
-                setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), [
-
-                        'expires' => time() + 3600,
-                        'path' => '/',
-                        'domain' => $this->analytics['current_page']['host']
-                    ]
-                );
-            }
+			if (version_compare(PHP_VERSION, '7.3.0') >= 0) {
+				$arr_cookie_options = [
+					'expires'  => time() + 3600,
+					'path'     => '/',
+					'secure'   => true,     // or false
+					'httponly' => false,    // or false
+					'samesite' => 'None' // None || Lax  || Strict
+				];
+				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), $arr_cookie_options);
+				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/");
+				
+				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), $arr_cookie_options);
+				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/");
+			}else{
+				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/; SameSite=None; Secure");
+				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/");
+				
+				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/; SameSite=None; Secure");
+				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/");
+			}
 		}
-
+		
 		/**
 		 *  Sets the job filter data submitted with get jobs request
 		 *
@@ -296,7 +273,7 @@
 				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] == true ? 1 : 0;
 			}
 		}
-
+		
 		/**
 		 *  Sets the current page url for analytics
 		 *
@@ -308,16 +285,16 @@
 			if($_SERVER["HTTPS"] == "on") {
 				$pageURL .= "s";
 			}
-
+			
 			if(isset($_SERVER["HTTP_HOST"])) {
 				$pageURL .= "://" . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
 			} else {
 				$pageURL .= "://" . $_SERVER["SERVER_NAME"] . $_SERVER["REQUEST_URI"];
 			}
-
+			
 			$this->analytics['current_page'] = parse_url($pageURL) + $this->analytics['current_page'];
 		}
-
+		
 		/**
 		 *  Sets the current referrer url for analytics
 		 *
@@ -331,7 +308,7 @@
 				$this->analytics['referrer'] = parse_url($url) + $this->analytics['referrer'];
 			}
 		}
-
+		
 		/**
 		 *  Get company data.
 		 *
@@ -341,21 +318,21 @@
 		 * @throws Exception
 		 */
 		public function getCompany(?int $companyId = null): array {
-
+			
 			$url = !empty($companyId) ? $this->url['get_company'] . '/' . $companyId : $this->url['get_company'];
-
+			
 			$result = $this->curlGet($url, null);
-
+			
 			if($result['status_code'] === 401) {
-
+				
 				if($this->authenticate()['success']) {
 					$this->getCompany($companyId);
 				}
 			}
-
+			
 			return $result;
 		}
-
+		
 		/**
 		 *  Get company data by sub domain
 		 *
@@ -365,19 +342,19 @@
 		 * @throws Exception
 		 */
 		public function getCompanyBySubDomain(string $subDomain = ''): array {
-
+			
 			$result = $this->curlGet($this->url['get_company_by_sub_domain'] . '/' . $subDomain, null);
-
+			
 			if($result['status_code'] === 401) {
-
+				
 				if($this->authenticate()['success']) {
 					$this->getCompanyBySubDomain($subDomain);
 				}
 			}
-
+			
 			return $result;
 		}
-
+		
 		/**
 		 *  Find jobs from SCOPE based on the pre defined filter values.
 		 *
@@ -388,19 +365,19 @@
 		 */
 		public function getJobs(?int $companyId = null): array {
 			$url = !empty($companyId) ? $this->url['get_jobs'] . '/' . $companyId : $this->url['get_jobs'];
-
+			
 			$result = $this->curlGet($url, null, $this->filter);
-
+			
 			if($result['status_code'] === 401) {
-
+				
 				if($this->authenticate()['success']) {
 					$this->getJobs();
 				}
 			}
-
+			
 			return $result;
 		}
-
+		
 		/**
 		 *  Get one job from SCOPE.
 		 *
@@ -411,39 +388,39 @@
 		 * @throws Exception
 		 */
 		public function getJob(?int $jobId = null, ?int $companyLocationId = null): array {
-
+			
 			if(empty($jobId)) {
 				throw new Exception('Missing job id parameter');
 			}
 			if(empty($companyLocationId)) {
 				throw new Exception('Missing company location id parameter');
 			}
-
+			
 			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '?preview=' . $this->filter['preview'];
-
+			
 			$result = $this->curlGet($url, null);
-
+			
 			if($result['status_code'] === 401) {
 				if($this->authenticate()['success']) {
 					$this->getJob($jobId, $companyLocationId);
 				}
 			}
-
+			
 			return $result;
 		}
-
+		
 		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
 			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
-
+			
 			if($result['status_code'] === 401) {
 				if($this->authenticate()['success']) {
 					$this->saveApplicant($data, $jobId, $companyLocationId);
 				}
 			}
-
+			
 			return $result;
 		}
-
+		
 		/**
 		 * Uploads an applicant documents before or after submitting his data.
 		 * After the first successful upload, the api will response with the created applicantId.
@@ -459,7 +436,7 @@
 		 * @throws Exception
 		 */
 		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
-
+			
 			if(empty($data)) {
 				throw new Exception('Missing applicant data');
 			}
@@ -472,28 +449,28 @@
 			if(empty($companyLocationId)) {
 				throw new Exception('Missing company location id parameter');
 			}
-
+			
 			$url = !empty($applicantId)
 				? $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId . '/' . $applicantId
 				: $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId;
-
+			
 			$result = $this->curlPost($url, null, $data);
-
+			
 			if($result['status_code'] === 401) {
 				if($this->authenticate()['success']) {
 					$this->uploadDocument($data, $documentType, $jobId, $companyLocationId, $applicantId);
 				}
 			}
-
+			
 			return $result;
 		}
-
+		
 		public function getGoogleTagCode(?string $publicId = ''): array {
 			$tagCode = [
 				'head' => '',
 				'body' => ''
 			];
-
+			
 			if($this->analytics['active'] && !empty($publicId)) {
 				$tagCode['head'] =
 					"<!-- Google Tag Manager -->" .
@@ -504,7 +481,7 @@
 					"})(window,document,'script','dataLayer', '" .
 					$publicId . "');</script> " .
 					"<!-- End Google Tag Manager -->";
-
+				
 				$tagCode['body'] =
 					'<!-- Google Tag Manager (noscript) -->' .
 					'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' .
@@ -512,27 +489,27 @@
 					'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> ' .
 					'<!-- End Google Tag Manager (noscript) -->';
 			}
-
+			
 			return $tagCode;
 		}
-
+		
 		public function getAuthData(): array {
 			return $this->auth;
 		}
-
+		
 		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $country = true): string {
 			$address = '';
-
+			
 			if(!empty($companyLocation)) {
-
+				
 				if($street && !empty($companyLocation['CompanyLocation']['street'])) {
 					$address = $companyLocation['CompanyLocation']['street'];
 				}
-
+				
 				if($street && !empty($companyLocation['CompanyLocation']['street_number'])) {
 					$address .= ' ' . $companyLocation['CompanyLocation']['street_number'];
 				}
-
+				
 				if(($city && !empty($companyLocation['CompanyLocation']['city'])) || ($street && empty($companyLocation['CompanyLocation']['street'] && !empty($companyLocation['CompanyLocation']['city'])))) {
 					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['city'] : $companyLocation['CompanyLocation']['city'];
 				}
@@ -540,110 +517,106 @@
 					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['country'] : $companyLocation['CompanyLocation']['country'];
 				}
 			}
-
+			
 			return $address;
 		}
-
+		
 		public function getEmploymentTypeList(array $jobs = []): array {
 			$list = [];
 			foreach($jobs as $key => $value) {
-
+				
 				if(!empty($value['Job']['employment'])) {
-
+					
 					$employments = explode(',', $value['Job']['employment']);
 					$employments = is_array($employments) ? $employments : [$employments];
-
+					
 					foreach($employments as $k => $v) {
 						if(!in_array($v, $list)) {
-							$list[trim(strtolower($v), " ")] = $v;
+							$list[strtolower($v)] = $v;
 						}
 					}
 				}
 			}
+			
 			return $list;
 		}
-
+		
 		public function getCurrentPageURL(string $part = 'full'): string {
 			$url = $part === 'full'
 				? $this->analytics['current_page']['scheme'] . '://' .
-				  $this->analytics['current_page']['host'] .
-				  $this->analytics['current_page']['path'] .
-				  $this->analytics['current_page']['query']
+				$this->analytics['current_page']['host'] .
+				$this->analytics['current_page']['path'] .
+				$this->analytics['current_page']['query']
 				: $this->analytics['current_page'][$part];
-
+			
 			return $url;
 		}
-
+		
 		public function printH($data): void {
 			echo "<pre>";
 			print_r($data);
 			echo "</pre>";
 			die;
 		}
-
-		public function consoleLog($data) {
-			echo '<script>';
-			echo 'console.log(' . json_encode($data) . ')';
-			echo '</script>';
-		}
-
+		
 		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
-
+			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
-
+			
 			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
 			$query['language'] = $this->filter['language'];
-
+			
 			$queryData = http_build_query($query);
-
+			
 			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
-
+			
 			$curl = curl_init($this->scope_url . $url . $query);
-
+			
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+			
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
+			
 			curl_close($curl);
-
+			
 			return $result;
 		}
-
+		
 		private function curlPost(string $url, ?array $header = [], array $data = []): array {
-
+			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
-
+			
 			$data += $this->analytics;
-
+			
 			$dataString = json_encode($data);
-
+			
 			$curl = curl_init($this->scope_url . $url);
 			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
 			curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-
+			
 			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
+			
 			curl_close($curl);
-
+			
 			return $result;
 		}
-
+		
 		// Remove multiple UTF-8 BOM sequences
 		private function removeUtf8Bom($text): string {
 			$bom  = pack('H*', 'EFBBBF');
 			$text = preg_replace("/^$bom/", '', $text);
-
+			
 			return $text;
 		}
-
+		
 		/*
 		public function build_http_query($query) {
 
