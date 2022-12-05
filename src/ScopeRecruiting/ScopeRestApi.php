@@ -8,7 +8,7 @@
 	 * @author        Oleg Mutzenberger
 	 * @email         oleg@artrevolver.de
 	 * @web           https://scope-recruiting.de
-	 * @copyright     Copyright 2019, Reinhart, Neumann und Mutzenberger GbR
+	 * @copyright     Copyright 2023, Artrevolver GmbH
 	 * @license       http://opensource.org/licenses/mit-license.php MI
 	 *
 	 */
@@ -616,95 +616,4 @@
 			
 			return $text;
 		}
-		
-		/*
-		public function build_http_query($query) {
-
-			$query_array = [];
-
-			foreach($query as $key => $key_value) {
-				if(is_array($key_value)) {
-					foreach($key_value as $k => $v) {
-						if(!empty($v) || $v === false) {
-							if(is_bool($v)) {
-								$v = $v ? 'true' : 'false';
-							} else {
-								$v = urlencode($v);
-							}
-							$query_array[] = urlencode($key) . '=' . $v;
-						}
-					}
-				} else {
-					if(!empty($key_value) || $key_value === false) {
-						if(is_bool($key_value)) {
-							$key_value = $key_value ? 'true' : 'false';
-						} else {
-							$key_value = urlencode($key_value);
-						}
-						$query_array[] = urlencode($key) . '=' . $key_value;
-					}
-				}
-			}
-
-			return implode('&', $query_array);
-		}
-		 public function setApplicantAuthConfig(string $email, string $password): void {
-			if(empty($email)) {
-				throw new InvalidArgumentException('Missing email parameter.');
-			}
-			if(empty($password)) {
-				throw new InvalidArgumentException('Missing password parameter.');
-			}
-
-			$stamp          = strtotime('now');
-			$hashedPassword = password_hash($password, PASSWORD_BCRYPT, ['salt' => 'rgfoijewjf8273487bnfew']);
-
-			echo '###' . $hashedPassword . '###';
-
-			$signature = hash_hmac('SHA256', (string) $stamp, $hashedPassword);
-
-			$this->auth_config['applicant'] = [
-				'applicant_email'     => $email,
-				'applicant_signature' => $signature,
-				'timestamp'           => $stamp
-			]
-		};
-
-
-		public function authenticateApplicant(): array {
-			if(!$this->isTokenExpired()) {
-
-				$dataString = json_encode($this->auth_config['applicant']);
-
-				$url = $this->scope_url . $this->url['applicant_auth'];
-
-				$headr[] = "Token: " . $this->auth['company']['token'];
-				$headr[] = "Content-Type: application/json; charset=utf-8";
-
-				$curl = curl_init($url);
-
-				curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
-				curl_setopt($curl, CURLOPT_HTTPHEADER, $headr);
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
-
-				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-
-				curl_close($curl);
-
-				if($result['success']) {
-					$this->auth['applicant']['token']          = $result['token'];
-					$this->auth['applicant']['expiration'] = $result['expiration_date'];
-					$this->auth['applicant']['data']           = $result['data'];
-
-					return $result;
-				}
-
-				throw new \Exception('Auth error! Message from Scope: ' . $result['error']['message']);
-			}
-
-			throw new Exception('Token has expired!');
-		}
-
-		*/
 	}
