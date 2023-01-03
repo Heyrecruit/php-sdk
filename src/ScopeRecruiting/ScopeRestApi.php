@@ -161,7 +161,7 @@
 		/**
 		 *  Sets auth data for requesting an JWT access token
 		 *
-		 * @param $config        array ['SCOPE_CLIENT_ID']         int The client id of a registered SCOPE client.
+		 * @param array $config  ['SCOPE_CLIENT_ID']         int The client id of a registered SCOPE client.
 		 *                       ['SCOPE_CLIENT_SECRET']     string The client secret of a registered SCOPE client.
 		 *
 		 * @return void
@@ -497,7 +497,7 @@
 			return $this->auth;
 		}
 		
-		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $country = true): string {
+		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $state = true, bool $country = true): string {
 			$address = '';
 			
 			if(!empty($companyLocation)) {
@@ -513,7 +513,13 @@
 				if(($city && !empty($companyLocation['CompanyLocation']['city'])) || ($street && empty($companyLocation['CompanyLocation']['street'] && !empty($companyLocation['CompanyLocation']['city'])))) {
 					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['city'] : $companyLocation['CompanyLocation']['city'];
 				}
-				if($country && !empty($companyLocation['CompanyLocation']['country']) || (empty($companyLocation['CompanyLocation']['street']) && empty($companyLocation['CompanyLocation']['city']))) {
+				
+				if($state && !empty($companyLocation['CompanyLocation']['state']) || (empty($companyLocation['CompanyLocation']['street']) && empty($companyLocation['CompanyLocation']['city']))) {
+					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['state'] : $companyLocation['CompanyLocation']['state'];
+				}
+				
+				
+				if($country && !empty($companyLocation['CompanyLocation']['country']) || (empty($companyLocation['CompanyLocation']['state']) && empty($companyLocation['CompanyLocation']['street']) && empty($companyLocation['CompanyLocation']['city']))) {
 					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['country'] : $companyLocation['CompanyLocation']['country'];
 				}
 			}
