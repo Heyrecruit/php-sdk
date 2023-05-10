@@ -3,7 +3,7 @@
 	/**
 	 * Class ScopeRestApi
 	 *
-	 * A sample class to communicate with the scope-recruiting rest api
+	 * A sample class to communicate with the heyrecruit rest api
 	 *
 	 * @author        Oleg Mutzenberger
 	 * @email         oleg@artrevolver.de
@@ -35,15 +35,16 @@
 		/**
 		 * Holds visitor tracking information.
 		 *
-		 * array['active']          bool Defines weather visitor tracking is active. When set to true, tracking is handled via Google Tag Manager (GTM).
-		 *      ['current_page']    array Holds url_parse() information of client url.
-		 *      ['referrer']        array Holds url_parse() information of client referrer.
+		 * array    ['active']          Defines weather visitor tracking is active.
+		 *                              When set to true, tracking is handled via Google Tag Manager (GTM).
+		 *          ['current_page']    Holds url_parse() information of client url.
+		 *          ['referrer']        Holds url_parse() information of client referrer.
 		 *
 		 *
 		 * @var array $analytics (See above)
 		 *
 		 */
-		public $analytics = [
+		public array $analytics = [
 			'active'       => true,
 			'current_page' => [],
 			'referrer'     => [],
@@ -53,8 +54,8 @@
 		 * @var $auth array  Holds auth information.
 		 *
 		 */
-		protected $auth = [
-			'token' => null,
+		protected array $auth = [
+			'token'      => null,
 			'expiration' => null,
 		];
 		
@@ -67,7 +68,7 @@
 		 * @var array $auth_config (See above)
 		 *
 		 */
-		protected $auth_config = [
+		protected array $auth_config = [
 			'client_id'     => null,
 			'client_secret' => null
 		];
@@ -89,7 +90,7 @@
 		 * @var array $filter (See above)
 		 *
 		 */
-		private $filter = [
+		private array $filter = [
 			'id'                   => [],
 			'applicant_id'         => null,
 			'language'             => 'de',
@@ -115,9 +116,8 @@
 		 *
 		 *
 		 * @var array $url (See above)
-		 *
 		 */
-		private $url = [
+		private array $url = [
 			'auth'                      => 'rest_accounts/auth',
 			'get_company'               => 'rest_companies/view',
 			'get_company_by_sub_domain' => 'rest_companies/viewBySubDomain',
@@ -128,6 +128,14 @@
 			'delete_documents'          => 'rest_applicants/deleteDocument',
 		];
 		
+		/**
+		 * Initializes a new instance of the SDK with the specified configuration settings.
+		 *
+		 * @param array $config An associative array of configuration settings,
+		 *                      including the SCOPE_URL parameter and optional GA_TRACKING parameter.
+		 *
+		 * @throws InvalidArgumentException|Exception if the configuration settings are missing or incomplete.
+		 */
 		function __construct(array $config) {
 			if(empty($config)) {
 				throw new InvalidArgumentException('No configuration settings submitted.');
@@ -161,18 +169,17 @@
 		/**
 		 *  Sets auth data for requesting an JWT access token
 		 *
-		 * @param array $config  ['SCOPE_CLIENT_ID']         int The client id of a registered SCOPE client.
-		 *                       ['SCOPE_CLIENT_SECRET']     string The client secret of a registered SCOPE client.
+		 * @param array $config  ['SCOPE_CLIENT_ID']         int The client id of a registered Heyrecruit client.
+		 *                       ['SCOPE_CLIENT_SECRET']     string The client secret of a registered Heyrecruit client.
 		 *
 		 * @return void
-		 *
 		 */
 		public function setAuthConfig(array $config): void {
 			if(!isset($config['SCOPE_CLIENT_ID'])) {
-				throw new InvalidArgumentException('Missing SCOPE_CLIENT_ID parameter.');
+				throw new InvalidArgumentException('Missing CLIENT_ID parameter.');
 			}
 			if(!isset($config['SCOPE_CLIENT_SECRET'])) {
-				throw new InvalidArgumentException('Missing SCOPE_CLIENT_SECRET parameter.');
+				throw new InvalidArgumentException('Missing CLIENT_SECRET parameter.');
 			}
 			
 			$this->auth_config = [
@@ -186,7 +193,6 @@
 		 *
 		 * @return array
 		 * @throws Exception
-		 *
 		 */
 		public function authenticate(): array {
 			
@@ -200,34 +206,53 @@
 				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 				curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config);
 				
-				$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
+				$result = json_decode(curl_exec($curl), true);
 				
-				if($result['success']) {
-					$this->auth['token'] = $result['token'];
-					$this->auth['expiration'] = $result['expiration'];
+				if($result['status'] === 'OK') {
+					$this->auth['token']      = $result['data']['token'];
+					$this->auth['expiration'] = $result['data']['expiration'];
 				}
 			}else{
-				
 				$this->auth['token']      = $_SESSION['HEY_AUTH']['token'];
 				$this->auth['expiration'] = $_SESSION['HEY_AUTH']['expiration'];
 				
-				$result['success']      = true;
-				$result['status_code']  = 200;
-				$result['error']        = false;
+				$result['status'] = 'OK';
 			}
 			
-			if($result['success']) {
+			if($result['status'] === 'OK') {
 				return $result;
 			}
 			
-			throw new Exception('Auth error! Message from Scope: ' . $result['error']['message']);
+			throw new Exception('Auth error! Message from Heyrecruit: ' . $result['message']);
 		}
 		
 		/**
-		 *  Sets tracking information (analytics array) to a visitors cookie.
+		 * Checks whether the current access token has expired and renews it if necessary.
+		 *
+		 * @return bool True if the access token is still valid or has been successfully renewed, false otherwise.
+		 *
+		 * @throws Exception if an error occurs while authenticating or renewing the access token.
+		 */
+		private function checkAndRenewToken(): bool {
+			if ($this->auth['expiration'] < time()) {
+				$authResult = $this->authenticate();
+				
+				if ($authResult['success']) {
+					$this->auth['token']      = $authResult['data']['token'];
+					$this->auth['expiration'] = $authResult['data']['expiration'] - 60;
+					return true;
+				}
+				
+				return false;
+			}
+			
+			return true;
+		}
+		
+		/**
+		 *  Sets tracking information (analytics array) to a visitors' cookie.
 		 *
 		 * @return void
-		 *
 		 */
 		public function setAnalyticsCookie(): void {
 			if (version_compare(PHP_VERSION, '7.3.0') >= 0) {
@@ -317,46 +342,28 @@
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getCompany(?int $companyId = null): array {
-			
+		public function getCompany(?int $companyId): array {
 			$url = !empty($companyId) ? $this->url['get_company'] . '/' . $companyId : $this->url['get_company'];
 			
-			$result = $this->curlGet($url, null);
-			
-			if($result['status_code'] === 401) {
-				
-				if($this->authenticate()['success']) {
-					$this->getCompany($companyId);
-				}
-			}
-			
-			return $result;
+			return $this->apiRequest($url);
 		}
 		
 		/**
-		 *  Get company data by sub domain
+		 *  Get company data by subdomain
 		 *
 		 * @param $subDomain string
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getCompanyBySubDomain(string $subDomain = ''): array {
+		public function getCompanyBySubDomain(string $subDomain): array {
+			$url = $this->url['get_company_by_sub_domain'] . '/' . $subDomain;
 			
-			$result = $this->curlGet($this->url['get_company_by_sub_domain'] . '/' . $subDomain, null);
-			
-			if($result['status_code'] === 401) {
-				
-				if($this->authenticate()['success']) {
-					$this->getCompanyBySubDomain($subDomain);
-				}
-			}
-			
-			return $result;
+			return $this->apiRequest($url);
 		}
 		
 		/**
-		 *  Find jobs from SCOPE based on the pre defined filter values.
+		 *  Find jobs based on the pre-defined filter values.
 		 *
 		 * @param $companyId int|null
 		 *
@@ -366,49 +373,283 @@
 		public function getJobs(?int $companyId = null): array {
 			$url = !empty($companyId) ? $this->url['get_jobs'] . '/' . $companyId : $this->url['get_jobs'];
 			
-			$result = $this->curlGet($url, null, $this->filter);
+			return $this->apiRequest($url, $this->filter);
+		}
+		
+		/**
+		 *  Get one job.
+		 *
+		 * @param int|null $jobId
+		 * @param int|null $companyLocationId
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function getJob(int $jobId, int $companyLocationId): array {
+
+			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '?preview=' . $this->filter['preview'];
 			
-			if($result['status_code'] === 401) {
+			return $this->apiRequest($url);
+		}
+		
+		/**
+		 * Generates Google Tag Manager code for the specified public ID.
+		 *
+		 * @param string|null $publicId The public ID of the Google Tag Manager container.
+		 *
+		 * @return array An associative array containing the Google Tag Manager code for the head and body sections of a webpage.
+		 */
+		public function getGoogleTagCode(?string $publicId = ''): array {
+			$tagCode = [
+				'head' => '',
+				'body' => ''
+			];
+			
+			if($this->analytics['active'] && !empty($publicId)) {
+				$tagCode['head'] =
+					"<!-- Google Tag Manager -->" .
+					"<script> (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': " .
+					"new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0], " .
+					"j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src= " .
+					"'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f); " .
+					"})(window,document,'script','dataLayer', '" .
+					$publicId . "');</script> " .
+					"<!-- End Google Tag Manager -->";
 				
-				if($this->authenticate()['success']) {
-					$this->getJobs();
+				$tagCode['body'] =
+					'<!-- Google Tag Manager (noscript) -->' .
+					'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' .
+					$publicId . '" ' .
+					'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> ' .
+					'<!-- End Google Tag Manager (noscript) -->';
+			}
+			
+			return $tagCode;
+		}
+		
+		/**
+		 * Returns the authentication data for this SDK instance.
+		 *
+		 * @return array An associative array containing the authentication data.
+		 */
+		public function getAuthData(): array {
+			return $this->auth;
+		}
+		
+		/**
+		 * Formats a company location as a human-readable address string.
+		 *
+		 * @param array $companyLocation An associative array containing the address data.
+		 * @param bool $street Whether to include the street name and number in the address.
+		 * @param bool $city Whether to include the city name in the address.
+		 * @param bool $state Whether to include the state or province in the address.
+		 * @param bool $country Whether to include the country name in the address.
+		 *
+		 * @return string The formatted address string.
+		 */
+		public function getFormattedAddress(
+			array $companyLocation = [],
+			bool $street = true,
+			bool $city = true,
+			bool $state = true,
+			bool $country = true
+		): string {
+			
+			$address = '';
+			$hasAddress = false;
+			
+			if (!empty($companyLocation)) {
+				if ($street) {
+					$address .= $companyLocation['CompanyLocation']['street'] ?? '';
+					$address .= ' ' . ($companyLocation['CompanyLocation']['street_number'] ?? '');
+					$hasAddress = !empty(trim($address));
 				}
+				
+				if ($city) {
+					$address .= $hasAddress ? ', ' : '';
+					$address .= $companyLocation['CompanyLocation']['city'] ?? '';
+					$hasAddress = !empty(trim($address));
+				}
+				
+				if ($state) {
+					$address .= $hasAddress ? ', ' : '';
+					$address .= $companyLocation['CompanyLocation']['state'] ?? '';
+					$hasAddress = !empty(trim($address));
+				}
+				
+				if ($country) {
+					$address .= $hasAddress ? ', ' : '';
+					$address .= $companyLocation['CompanyLocation']['country'] ?? '';
+				}
+			}
+			
+			return $address;
+		}
+		
+		/**
+		 * Returns a list of unique employment types from the given jobs.
+		 *
+		 * @param array $jobs An array of job data.
+		 *
+		 * @return array An array of unique employment types.
+		 */
+		public function getEmploymentTypeList(array $jobs = []): array {
+			$list = [];
+			
+			foreach ($jobs as $job) {
+				$employmentTypes = array_map('trim', explode(',', $job['Job']['employment'] ?? ''));
+				$list = array_merge($list, $employmentTypes);
+			}
+			
+			return array_unique(array_map('strtolower', $list));
+		}
+		
+		/**
+		 * Get the current page URL.
+		 *
+		 * @param string $part The part of the URL to retrieve ('full', 'scheme', 'host', 'path', or 'query').
+		 *                     Defaults to 'full'.
+		 *
+		 * @return string The requested part of the current page URL.
+		 */
+		public function getCurrentPageURL(string $part = 'full'): string {
+			$url = $part === 'full'
+				? $this->analytics['current_page']['scheme'] . '://' .
+				$this->analytics['current_page']['host'] .
+				$this->analytics['current_page']['path'] .
+				$this->analytics['current_page']['query']
+				: $this->analytics['current_page'][$part];
+			
+			return $url;
+		}
+		
+		/**
+		 * Performs an API request with the specified URL, data, method, and headers.
+		 * Checks and renews the authentication token if necessary.
+		 *
+		 * @param string $url The URL of the API endpoint.
+		 * @param array $data The data to send in the API request (optional).
+		 * @param string $method The HTTP method to use for the API request (default is 'GET').
+		 * @param array $headers The headers to send in the API request (optional).
+		 *
+		 * @return array An associative array containing the API response status code, success status, and data.
+		 *               If the authentication fails, returns an error message with a status code of 401.
+		 * @throws Exception
+		 */
+		private function apiRequest(string $url, array $data = [], string $method = 'GET', array $headers = []): array {
+			if (!$this->checkAndRenewToken()) {
+				return ['status_code' => 401, 'success' => false, 'message' => 'Auth error!'];
+			}
+			
+			if($method === 'GET') {
+				$result = $this->curlGet($url, $data, $headers);
+			}else{
+				$result = $this->curlPost($url, $data, $headers);
+			}
+			
+			if ($result['status_code'] === 401 && $this->checkAndRenewToken()) {
+				return $this->apiRequest($url, $data, $method, $headers);
 			}
 			
 			return $result;
 		}
 		
 		/**
-		 *  Get one job from SCOPE.
+		 * Performs a GET request with the specified URL, query parameters, and headers.
 		 *
-		 * @param int $jobId             : The ID of the job to get from SCOPE.
-		 * @param int $companyLocationId : The ID of the company location that belongs to the job.
+		 * @param string $url The URL to send the GET request to.
+		 * @param array|null $query The query parameters to include in the GET request (optional).
+		 * @param array|null $header The headers to include in the GET request (optional).
 		 *
-		 * @return array
-		 * @throws Exception
+		 * @return array An associative array containing the response data and status code of the GET request.
 		 */
-		public function getJob(?int $jobId = null, ?int $companyLocationId = null): array {
+		private function curlGet(string $url, ?array $query = [], ?array $header = []): array {
 			
-			if(empty($jobId)) {
-				throw new Exception('Missing job id parameter');
-			}
-			if(empty($companyLocationId)) {
-				throw new Exception('Missing company location id parameter');
+			if(empty($header)) {
+				$header[] = "Authorization: Bearer " . $this->auth['token'];
+				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
 			
-			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '?preview=' . $this->filter['preview'];
+			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
+			$query['language'] = $this->filter['language'];
 			
-			$result = $this->curlGet($url, null);
+			$queryData = http_build_query($query);
 			
-			if($result['status_code'] === 401) {
-				if($this->authenticate()['success']) {
-					$this->getJob($jobId, $companyLocationId);
-				}
-			}
+			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
 			
-			return $result;
+			$curl = curl_init($this->scope_url . $url . $query);
+			
+			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+			
+			$response = curl_exec($curl);
+			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+			
+			$result = json_decode($response, true);
+			
+			curl_close($curl);
+			
+			return array(
+				'response'    => $result,
+				'status_code' => $httpCode,
+			);
 		}
 		
+		/**
+		 * Performs a POST request with the specified URL, data, and headers.
+		 *
+		 * @param string $url The URL to send the POST request to.
+		 * @param array|null $header The headers to include in the POST request (optional).
+		 * @param array $data The data to send in the POST request (optional).
+		 *
+		 * @return array An associative array containing the response data and status code of the POST request.
+		 */
+		private function curlPost(string $url, ?array $header = [], array $data = []): array {
+			
+			if(empty($header)) {
+				$header[] = "Authorization: Bearer " . $this->auth['token'];
+				$header[] = "Content-Type: application/json; charset: UTF-8";
+			}
+			
+			$data += $this->analytics;
+			
+			$dataString = json_encode($data);
+			
+			$curl = curl_init($this->scope_url . $url);
+			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
+			curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
+			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+			
+			$response = curl_exec($curl);
+			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+			
+			$result = json_decode($response, true);
+			
+			curl_close($curl);
+			
+			return array(
+				'response'    => $result,
+				'status_code' => $httpCode,
+			);
+		}
+		
+		/**
+		 * Prints the specified data in a human-readable format and stops the execution of the script.
+		 *
+		 * @param mixed $data The data to print.
+		 *
+		 * @return void This method does not return a value, but it stops the execution of the script.
+		 */
+		public function printH($data): void {
+			echo "<pre>";
+			print_r($data);
+			echo "</pre>";
+			die;
+		}
+		
+		
+		/*
 		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
 			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
 			
@@ -435,6 +676,8 @@
 		 * @return array
 		 * @throws Exception
 		 */
+		
+		/*
 		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
 			
 			if(empty($data)) {
@@ -465,161 +708,7 @@
 			return $result;
 		}
 		
-		public function getGoogleTagCode(?string $publicId = ''): array {
-			$tagCode = [
-				'head' => '',
-				'body' => ''
-			];
-			
-			if($this->analytics['active'] && !empty($publicId)) {
-				$tagCode['head'] =
-					"<!-- Google Tag Manager -->" .
-					"<script> (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': " .
-					"new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0], " .
-					"j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src= " .
-					"'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f); " .
-					"})(window,document,'script','dataLayer', '" .
-					$publicId . "');</script> " .
-					"<!-- End Google Tag Manager -->";
-				
-				$tagCode['body'] =
-					'<!-- Google Tag Manager (noscript) -->' .
-					'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' .
-					$publicId . '" ' .
-					'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> ' .
-					'<!-- End Google Tag Manager (noscript) -->';
-			}
-			
-			return $tagCode;
-		}
+		*/
 		
-		public function getAuthData(): array {
-			return $this->auth;
-		}
 		
-		public function getFormattedAddress(array $companyLocation = [], bool $street = true, bool $city = true, bool $state = true, bool $country = true): string {
-			$address = '';
-			
-			if(!empty($companyLocation)) {
-				
-				if($street && !empty($companyLocation['CompanyLocation']['street'])) {
-					$address = $companyLocation['CompanyLocation']['street'];
-				}
-				
-				if($street && !empty($companyLocation['CompanyLocation']['street_number'])) {
-					$address .= ' ' . $companyLocation['CompanyLocation']['street_number'];
-				}
-				
-				if(($city && !empty($companyLocation['CompanyLocation']['city'])) || ($street && empty($companyLocation['CompanyLocation']['street'] && !empty($companyLocation['CompanyLocation']['city'])))) {
-					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['city'] : $companyLocation['CompanyLocation']['city'];
-				}
-				
-				if($state && !empty($companyLocation['CompanyLocation']['state']) || (empty($companyLocation['CompanyLocation']['street']) && empty($companyLocation['CompanyLocation']['city']))) {
-					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['state'] : $companyLocation['CompanyLocation']['state'];
-				}
-				
-				
-				if($country && !empty($companyLocation['CompanyLocation']['country']) || (empty($companyLocation['CompanyLocation']['state']) && empty($companyLocation['CompanyLocation']['street']) && empty($companyLocation['CompanyLocation']['city']))) {
-					$address .= $address !== '' ? ', ' . $companyLocation['CompanyLocation']['country'] : $companyLocation['CompanyLocation']['country'];
-				}
-			}
-			
-			return $address;
-		}
-		
-		public function getEmploymentTypeList(array $jobs = []): array {
-			$list = [];
-			foreach($jobs as $key => $value) {
-				
-				if(!empty($value['Job']['employment'])) {
-					
-					$employments = explode(',', $value['Job']['employment']);
-					$employments = is_array($employments) ? $employments : [$employments];
-					
-					foreach($employments as $k => $v) {
-						if(!in_array($v, $list)) {
-							$list[strtolower($v)] = $v;
-						}
-					}
-				}
-			}
-			
-			return $list;
-		}
-		
-		public function getCurrentPageURL(string $part = 'full'): string {
-			$url = $part === 'full'
-				? $this->analytics['current_page']['scheme'] . '://' .
-				$this->analytics['current_page']['host'] .
-				$this->analytics['current_page']['path'] .
-				$this->analytics['current_page']['query']
-				: $this->analytics['current_page'][$part];
-			
-			return $url;
-		}
-		
-		public function printH($data): void {
-			echo "<pre>";
-			print_r($data);
-			echo "</pre>";
-			die;
-		}
-		
-		private function curlGet(string $url, ?array $header = [], ?array $query = []): array {
-			
-			if(empty($header)) {
-				$header[] = "Authorization: Bearer " . $this->auth['token'];
-				$header[] = "Content-Type: application/json; charset: UTF-8";
-			}
-			
-			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
-			$query['language'] = $this->filter['language'];
-			
-			$queryData = http_build_query($query);
-			
-			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
-			
-			$curl = curl_init($this->scope_url . $url . $query);
-			
-			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-			
-			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-			
-			curl_close($curl);
-			
-			return $result;
-		}
-		
-		private function curlPost(string $url, ?array $header = [], array $data = []): array {
-			
-			if(empty($header)) {
-				$header[] = "Authorization: Bearer " . $this->auth['token'];
-				$header[] = "Content-Type: application/json; charset: UTF-8";
-			}
-			
-			$data += $this->analytics;
-			
-			$dataString = json_encode($data);
-			
-			$curl = curl_init($this->scope_url . $url);
-			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
-			curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
-			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
-			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-			
-			$result = json_decode($this->removeUtf8Bom(curl_exec($curl)), true);
-			
-			curl_close($curl);
-			
-			return $result;
-		}
-		
-		// Remove multiple UTF-8 BOM sequences
-		private function removeUtf8Bom($text): string {
-			$bom  = pack('H*', 'EFBBBF');
-			$text = preg_replace("/^$bom/", '', $text);
-			
-			return $text;
-		}
 	}
