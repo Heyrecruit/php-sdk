@@ -76,31 +76,31 @@
 		/**
 		 * Job filter data submitted with get jobs request.
 		 *
-		 * array['id']                      int Job id.
-		 *      ['applicant_id']            string Applicant id. When given and found, form questions are pre filled with applicant data.
-		 *      ['language']                string The language shortcut for strings to be returned from scope.
-		 *      ['location']                int Company location id.
-		 *      ['department']              string Job department (e.g. Software development).
-		 *      ['employment']              string Job employment (e.g. full time, part time)
-		 *      ['address']                 string Job address.
+		 * array['job_ids']                 array job ids
+		 *      ['company_location_ids']    array company location ids
+		 *      ['department']              array Job department (e.g. Software development)
+		 *      ['employment']              array Job employment (e.g. full time, part time)
+		 *      ['language']                string The language shortcut for strings to be returned from scope
+		 *      ['address']                 string Job address
+		 *      ['search']                  string search
 		 *      ['area_search_distance']    int Area search distance for address. Default 60000 => 60 km
-		 *      ['internal_title']          string Internal job title.
+		 *      ['internal_title']          string Internal job title
 		 *
 		 *
 		 * @var array $filter (See above)
 		 *
 		 */
 		private array $filter = [
-			'id'                   => [],
-			'applicant_id'         => null,
+			'job_ids'              => [],
+			'company_location_ids' => [],
+			'departments'          => [],
+			'employments'          => [],
+			'internal_titles'       => [],
 			'language'             => 'de',
-			'location'             => [],
-			'department'           => [],
-			'employment'           => [],
-			'internal_title'       => [],
+			'search'               => null,
 			'address'              => null,
 			'area_search_distance' => 60000, // 60 km
-			'preview'              => false
+			'limit'                => 999,
 		];
 		
 		/**
@@ -118,14 +118,14 @@
 		 * @var array $url (See above)
 		 */
 		private array $url = [
-			'auth'                      => 'rest_accounts/auth',
-			'get_company'               => 'rest_companies/view',
-			'get_company_by_sub_domain' => 'rest_companies/viewBySubDomain',
-			'get_jobs'                  => 'rest_jobs/index',
-			'get_job'                   => 'rest_jobs/view',
-			'add_applicant'             => 'rest_applicants/add',
-			'upload_documents'          => 'rest_applicants/uploadDocument',
-			'delete_documents'          => 'rest_applicants/deleteDocument',
+			'auth'                      => 'auth',
+			'get_company'               => 'companies/view',
+			'get_company_by_sub_domain' => 'companies/view-by-domain',
+			'get_jobs'                  => 'jobs/index',
+			'get_job'                   => 'jobs/view',
+			'add_applicant'             => 'rest-applicants/add',
+			'upload_documents'          => 'rest-applicants/uploadDocument',
+			'delete_documents'          => 'rest-applicants/deleteDocument',
 		];
 		
 		/**
@@ -137,6 +137,7 @@
 		 * @throws InvalidArgumentException|Exception if the configuration settings are missing or incomplete.
 		 */
 		function __construct(array $config) {
+			
 			if(empty($config)) {
 				throw new InvalidArgumentException('No configuration settings submitted.');
 			}
@@ -157,6 +158,10 @@
 				'path'   => null,
 				'query'  => null
 			];
+			
+			if (substr($this->scope_url, -1) === "/") {
+				$this->scope_url = rtrim($this->scope_url, "/");
+			}
 			
 			$this->analytics['current_page'] = $urlObject;
 			$this->analytics['referrer']     = $urlObject;
@@ -195,31 +200,27 @@
 		 * @throws Exception
 		 */
 		public function authenticate(): array {
-			
-			if(
-				!isset($_SESSION['HEY_AUTH']) ||
-				empty($_SESSION['HEY_AUTH']['token']) ||
-				time() >  $_SESSION['HEY_AUTH']['expiration']
-			) {
-				
-				$curl = curl_init($this->scope_url . $this->url['auth']);
-				curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($curl, CURLOPT_POSTFIELDS, $this->auth_config);
-				
-				$result = json_decode(curl_exec($curl), true);
-				
-				if($result['status'] === 'OK') {
-					$this->auth['token']      = $result['data']['token'];
-					$this->auth['expiration'] = $result['data']['expiration'];
-				}
-			}else{
-				$this->auth['token']      = $_SESSION['HEY_AUTH']['token'];
-				$this->auth['expiration'] = $_SESSION['HEY_AUTH']['expiration'];
-				
-				$result['status'] = 'OK';
+			$auth = $_SESSION['HEY_AUTH'] ?? [];
+			if (!empty($auth) && $auth['expiration'] > time()) {
+				$this->auth = $auth;
+				return ['status' => 'OK', 'data' => $auth];
 			}
 			
-			if($result['status'] === 'OK') {
+			$curl = curl_init($this->scope_url . DS . $this->url['auth']);
+			
+			curl_setopt_array($curl, [
+				CURLOPT_RETURNTRANSFER => true,
+				CURLOPT_POSTFIELDS => $this->auth_config
+			]);
+			
+			$response = curl_exec($curl);
+			
+			$result = json_decode($response, true);
+			curl_close($curl);
+			
+			if ($result['status'] === 'OK') {
+				$this->auth = $result['data'];
+				$_SESSION['HEY_AUTH'] = $this->auth;
 				return $result;
 			}
 			
@@ -237,7 +238,7 @@
 			if ($this->auth['expiration'] < time()) {
 				$authResult = $this->authenticate();
 				
-				if ($authResult['success']) {
+				if ($authResult['status'] === 'OK') {
 					$this->auth['token']      = $authResult['data']['token'];
 					$this->auth['expiration'] = $authResult['data']['expiration'] - 60;
 					return true;
@@ -288,9 +289,10 @@
 		public function setFilter(string $queryParams = ''): void {
 			if(!empty($queryParams)) {
 				$qs = preg_replace("/(?<=^|&)(\w+)(?==)/", "$1[]", $queryParams);
-				parse_str($qs, $new_GET);
+				parse_str($qs, $newGET);
 				// Replace only the wanted keys
-				$this->filter = array_replace($this->filter, array_intersect_key($new_GET, $this->filter));
+				$this->filter = array_replace($this->filter, array_intersect_key($newGET, $this->filter));
+				
 				// Only one language allowed
 				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
 				// Only one address allowed
@@ -335,31 +337,30 @@
 		}
 		
 		/**
-		 *  Get company data.
+		 *  Get company detail.
 		 *
 		 * @param $companyId int|null
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getCompany(?int $companyId): array {
-			$url = !empty($companyId) ? $this->url['get_company'] . '/' . $companyId : $this->url['get_company'];
-			
-			return $this->apiRequest($url);
+		public function getCompanyDetail(int $companyId): array {
+			$url = $this->url['get_company'];
+			return $this->apiRequest($url, ['company' => $companyId]);
 		}
 		
 		/**
-		 *  Get company data by subdomain
+		 *  Get company detail by subdomain
 		 *
 		 * @param $subDomain string
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getCompanyBySubDomain(string $subDomain): array {
-			$url = $this->url['get_company_by_sub_domain'] . '/' . $subDomain;
+		public function getCompanyDetailBySubDomain(string $subDomain): array {
+			$url = $this->url['get_company_by_sub_domain'];
 			
-			return $this->apiRequest($url);
+			return $this->apiRequest($url, ['domain' => $subDomain]);
 		}
 		
 		/**
@@ -370,8 +371,10 @@
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getJobs(?int $companyId = null): array {
-			$url = !empty($companyId) ? $this->url['get_jobs'] . '/' . $companyId : $this->url['get_jobs'];
+		public function getJobs(int $companyId = null): array {
+			$url =  $this->url['get_jobs'];
+			
+			$this->filter['company'] = $companyId;
 			
 			return $this->apiRequest($url, $this->filter);
 		}
@@ -385,11 +388,16 @@
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getJob(int $jobId, int $companyLocationId): array {
-
-			$url = $this->url['get_job'] . '/' . $jobId . '/' . $companyLocationId . '?preview=' . $this->filter['preview'];
+		public function getJob(int $companyId = null, int $jobId, int $companyLocationId): array {
 			
-			return $this->apiRequest($url);
+			$url =  $this->url['get_job'];
+			
+			return $this->apiRequest($url, [
+				'company'          => $companyId,
+				'job_id'              => $jobId,
+				'company_location_id' => $companyLocationId,
+			]);
+			
 		}
 		
 		/**
@@ -397,7 +405,8 @@
 		 *
 		 * @param string|null $publicId The public ID of the Google Tag Manager container.
 		 *
-		 * @return array An associative array containing the Google Tag Manager code for the head and body sections of a webpage.
+		 * @return array An associative array containing the Google Tag Manager code
+		 *               for the head and body sections of a webpage.
 		 */
 		public function getGoogleTagCode(?string $publicId = ''): array {
 			$tagCode = [
@@ -434,74 +443,6 @@
 		 */
 		public function getAuthData(): array {
 			return $this->auth;
-		}
-		
-		/**
-		 * Formats a company location as a human-readable address string.
-		 *
-		 * @param array $companyLocation An associative array containing the address data.
-		 * @param bool $street Whether to include the street name and number in the address.
-		 * @param bool $city Whether to include the city name in the address.
-		 * @param bool $state Whether to include the state or province in the address.
-		 * @param bool $country Whether to include the country name in the address.
-		 *
-		 * @return string The formatted address string.
-		 */
-		public function getFormattedAddress(
-			array $companyLocation = [],
-			bool $street = true,
-			bool $city = true,
-			bool $state = true,
-			bool $country = true
-		): string {
-			
-			$address = '';
-			$hasAddress = false;
-			
-			if (!empty($companyLocation)) {
-				if ($street) {
-					$address .= $companyLocation['CompanyLocation']['street'] ?? '';
-					$address .= ' ' . ($companyLocation['CompanyLocation']['street_number'] ?? '');
-					$hasAddress = !empty(trim($address));
-				}
-				
-				if ($city) {
-					$address .= $hasAddress ? ', ' : '';
-					$address .= $companyLocation['CompanyLocation']['city'] ?? '';
-					$hasAddress = !empty(trim($address));
-				}
-				
-				if ($state) {
-					$address .= $hasAddress ? ', ' : '';
-					$address .= $companyLocation['CompanyLocation']['state'] ?? '';
-					$hasAddress = !empty(trim($address));
-				}
-				
-				if ($country) {
-					$address .= $hasAddress ? ', ' : '';
-					$address .= $companyLocation['CompanyLocation']['country'] ?? '';
-				}
-			}
-			
-			return $address;
-		}
-		
-		/**
-		 * Returns a list of unique employment types from the given jobs.
-		 *
-		 * @param array $jobs An array of job data.
-		 *
-		 * @return array An array of unique employment types.
-		 */
-		public function getEmploymentTypeList(array $jobs = []): array {
-			$list = [];
-			
-			foreach ($jobs as $job) {
-				$employmentTypes = array_map('trim', explode(',', $job['Job']['employment'] ?? ''));
-				$list = array_merge($list, $employmentTypes);
-			}
-			
-			return array_unique(array_map('strtolower', $list));
 		}
 		
 		/**
@@ -577,7 +518,7 @@
 			
 			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
 			
-			$curl = curl_init($this->scope_url . $url . $query);
+			$curl = curl_init($this->scope_url . DS . $url . $query);
 			
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
@@ -615,7 +556,7 @@
 			
 			$dataString = json_encode($data);
 			
-			$curl = curl_init($this->scope_url . $url);
+			$curl = curl_init($this->scope_url . DS . $url);
 			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
 			curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
@@ -647,6 +588,7 @@
 			echo "</pre>";
 			die;
 		}
+		
 		
 		
 		/*
