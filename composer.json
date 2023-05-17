@@ -1,12 +1,13 @@
 {
-  "name": "werbeagentur_artrevolver/scope-php-sdk",
-  "description": "PHP SDK for implementing scope recruiting with rest api.",
-  "homepage": "https://scope-recruiting.de",
+  "name": "heyrecruit/php-sdk",
+  "description": "PHP SDK for implementing Heyrecruit with rest api.",
+  "homepage": "https://heyrecruit.de",
   "keywords": [
     "scope",
     "recruiting",
     "artrevolver",
-    "SCOPE-Recruiting"
+    "scope-recruiting",
+    "heyrecruit"
   ],
   "license": "WTFPL",
   "authors": [
@@ -15,8 +16,8 @@
       "email": "oleg@scope-recruiting.de"
     },
     {
-      "name": "SCOPE Recruiting",
-      "homepage": "https://www.scope-recruiting.de"
+      "name": "Heyrecruit",
+      "homepage": "https://heyrecruit.de"
     }
   ],
   "type": "project",
@@ -25,7 +26,7 @@
   },
   "autoload": {
     "psr-4": {
-      "ScopeRecruiting\\": "src/ScopeRecruiting"
+      "Heyrecruit\\": "src/Heyrecruit"
     }
   }
 }
