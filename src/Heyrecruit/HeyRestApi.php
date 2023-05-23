@@ -494,11 +494,7 @@
 				$result = $this->curlPost($url, $data, $headers);
 			}
 			
-			if (
-				isset($result['response']['data']['error']) &&
-				$result['response']['data']['error'] === 'Invalid or empty token.' &&
-				$this->checkAndRenewToken()
-			) {
+			if ($result['response']['message'] === 'Expired token' && $this->checkAndRenewToken()) {
 				return $this->apiRequest($url, $data, $method, $headers, $attempt + 1);
 			}
 			
