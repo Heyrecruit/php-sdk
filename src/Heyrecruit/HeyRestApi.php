@@ -72,6 +72,8 @@
 			'client_secret' => null
 		];
 		
+		private $maxFailRequest = 3;
+		
 		/**
 		 * Job filter data submitted with get jobs request.
 		 *
@@ -148,6 +150,7 @@
 			if(isset($config['GA_TRACKING'])) {
 				$this->analytics['active'] = filter_var($config['GA_TRACKING'], FILTER_VALIDATE_BOOLEAN);
 			}
+			
 			
 			$this->scope_url = $config['SCOPE_URL'];
 			
@@ -476,7 +479,11 @@
 		 *               If the authentication fails, returns an error message with a status code of 401.
 		 * @throws Exception
 		 */
-		private function apiRequest(string $url, array $data = [], string $method = 'GET', array $headers = []): array {
+		private function apiRequest(string $url, array $data = [], string $method = 'GET', array $headers = [], int $attempt = 1): array {
+			if ($attempt > 3) {
+				return ['status_code' => 401, 'success' => false, 'message' => 'Auth error! Max retry limit exceeded!'];
+			}
+			
 			if (!$this->checkAndRenewToken()) {
 				return ['status_code' => 401, 'success' => false, 'message' => 'Auth error!'];
 			}
@@ -487,8 +494,12 @@
 				$result = $this->curlPost($url, $data, $headers);
 			}
 			
-			if ($result['status_code'] === 401 && $this->checkAndRenewToken()) {
-				return $this->apiRequest($url, $data, $method, $headers);
+			if (
+				isset($result['response']['data']['error']) &&
+				$result['response']['data']['error'] === 'Invalid or empty token.' &&
+				$this->checkAndRenewToken()
+			) {
+				return $this->apiRequest($url, $data, $method, $headers, $attempt + 1);
 			}
 			
 			return $result;

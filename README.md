@@ -11,7 +11,7 @@ A sample class to communicate with the heyrecruit rest API.
 
 ## Installation
 
-The SCOPE Recruiting PHP SDK can be installed with [Composer](https://getcomposer.org/). Run this command:
+The Heyrecruit PHP SDK can be installed with [Composer](https://getcomposer.org/). Run this command:
 
 ```sh
 composer require werbeagentur_artrevolver/scope_php_sdk
