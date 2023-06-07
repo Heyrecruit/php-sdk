@@ -32,24 +32,6 @@
 		public $scope_url;
 		
 		/**
-		 * Holds visitor tracking information.
-		 *
-		 * array    ['active']          Defines weather visitor tracking is active.
-		 *                              When set to true, tracking is handled via Google Tag Manager (GTM).
-		 *          ['current_page']    Holds url_parse() information of client url.
-		 *          ['referrer']        Holds url_parse() information of client referrer.
-		 *
-		 *
-		 * @var array $analytics (See above)
-		 *
-		 */
-		public array $analytics = [
-			'active'       => true,
-			'current_page' => [],
-			'referrer'     => [],
-		];
-		
-		/**
 		 * @var $auth array  Holds auth information.
 		 *
 		 */
@@ -124,7 +106,7 @@
 			'get_company_by_sub_domain' => 'companies/view-by-domain',
 			'get_jobs'                  => 'jobs/index',
 			'get_job'                   => 'jobs/view',
-			'add_applicant'             => 'rest-applicants/add',
+			'apply'                     => 'applicant-jobs/apply',
 			'upload_documents'          => 'rest-applicants/uploadDocument',
 			'delete_documents'          => 'rest-applicants/deleteDocument',
 		];
@@ -147,11 +129,6 @@
 				throw new InvalidArgumentException('Missing SCOPE_URL parameter.');
 			}
 			
-			if(isset($config['GA_TRACKING'])) {
-				$this->analytics['active'] = filter_var($config['GA_TRACKING'], FILTER_VALIDATE_BOOLEAN);
-			}
-			
-			
 			$this->scope_url = $config['SCOPE_URL'];
 			
 			$urlObject = [
@@ -165,12 +142,8 @@
 				$this->scope_url = rtrim($this->scope_url, "/");
 			}
 			
-			$this->analytics['current_page'] = $urlObject;
-			$this->analytics['referrer']     = $urlObject;
-			
 			$this->setAuthConfig($config);
 			$this->authenticate();
-			$this->setCurrentPageURL();
 		}
 		
 		/**
@@ -205,7 +178,7 @@
 			$auth = $_SESSION['HEY_AUTH'] ?? [];
 			if (!empty($auth) && $auth['expiration'] > time()) {
 				$this->auth = $auth;
-				return ['status' => 'OK', 'data' => $auth];
+				return ['status' => 'success', 'data' => $auth];
 			}
 			
 			$curl = curl_init($this->scope_url . DS . $this->url['auth']);
@@ -218,9 +191,10 @@
 			$response = curl_exec($curl);
 			
 			$result = json_decode($response, true);
+			
 			curl_close($curl);
 			
-			if ($result['status'] === 'OK') {
+			if ($result['status'] === 'success') {
 				$this->auth = $result['data'];
 				$_SESSION['HEY_AUTH'] = $this->auth;
 				return $result;
@@ -240,7 +214,7 @@
 			if ($this->auth['expiration'] < time()) {
 				$authResult = $this->authenticate();
 				
-				if ($authResult['status'] === 'OK') {
+				if ($authResult['status'] === 'success') {
 					$this->auth['token']      = $authResult['data']['token'];
 					$this->auth['expiration'] = $authResult['data']['expiration'] - 60;
 					return true;
@@ -250,34 +224,6 @@
 			}
 			
 			return true;
-		}
-		
-		/**
-		 *  Sets tracking information (analytics array) to a visitors' cookie.
-		 *
-		 * @return void
-		 */
-		public function setAnalyticsCookie(): void {
-			if (version_compare(PHP_VERSION, '7.3.0') >= 0) {
-				$arr_cookie_options = [
-					'expires'  => time() + 3600,
-					'path'     => '/',
-					'secure'   => true,     // or false
-					'httponly' => false,    // or false
-					'samesite' => 'None' // None || Lax  || Strict
-				];
-				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), $arr_cookie_options);
-				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/");
-				
-				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), $arr_cookie_options);
-				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/");
-			}else{
-				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/; SameSite=None; Secure");
-				setcookie("scope_analytics[current_page]", json_encode($this->analytics['current_page']), time() + 3600, "/");
-				
-				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/; SameSite=None; Secure");
-				setcookie("scope_analytics[referrer]", json_encode($this->analytics['referrer']), time() + 3600, "/");
-			}
 		}
 		
 		/**
@@ -303,39 +249,9 @@
 			}
 		}
 		
-		/**
-		 *  Sets the current page url for analytics
-		 *
-		 * @return void
-		 *
-		 */
-		public function setCurrentPageURL(): void {
-			$pageURL = 'http';
-			if($_SERVER["HTTPS"] == "on") {
-				$pageURL .= "s";
-			}
-			
-			if(isset($_SERVER["HTTP_HOST"])) {
-				$pageURL .= "://" . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
-			} else {
-				$pageURL .= "://" . $_SERVER["SERVER_NAME"] . $_SERVER["REQUEST_URI"];
-			}
-			
-			$this->analytics['current_page'] = parse_url($pageURL) + $this->analytics['current_page'];
-		}
-		
-		/**
-		 *  Sets the current referrer url for analytics
-		 *
-		 * @param $url  String|NULL
-		 *
-		 * @return void
-		 *
-		 */
-		public function setReferrer(?string $url): void {
-			if(!empty($url)) {
-				$this->analytics['referrer'] = parse_url($url) + $this->analytics['referrer'];
-			}
+		public function apply(array $data): array {
+			$url =  $this->url['apply'];
+			return $this->apiRequest($url, $data, 'POST');
 		}
 		
 		/**
@@ -399,7 +315,6 @@
 				'job_id'              => $jobId,
 				'company_location_id' => $companyLocationId,
 			]);
-			
 		}
 		
 		/**
@@ -416,7 +331,7 @@
 				'body' => ''
 			];
 			
-			if($this->analytics['active'] && !empty($publicId)) {
+			if(!empty($publicId)) {
 				$tagCode['head'] =
 					"<!-- Google Tag Manager -->" .
 					"<script> (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': " .
@@ -448,25 +363,6 @@
 		}
 		
 		/**
-		 * Get the current page URL.
-		 *
-		 * @param string $part The part of the URL to retrieve ('full', 'scheme', 'host', 'path', or 'query').
-		 *                     Defaults to 'full'.
-		 *
-		 * @return string The requested part of the current page URL.
-		 */
-		public function getCurrentPageURL(string $part = 'full'): string {
-			$url = $part === 'full'
-				? $this->analytics['current_page']['scheme'] . '://' .
-				$this->analytics['current_page']['host'] .
-				$this->analytics['current_page']['path'] .
-				$this->analytics['current_page']['query']
-				: $this->analytics['current_page'][$part];
-			
-			return $url;
-		}
-		
-		/**
 		 * Performs an API request with the specified URL, data, method, and headers.
 		 * Checks and renews the authentication token if necessary.
 		 *
@@ -494,7 +390,11 @@
 				$result = $this->curlPost($url, $data, $headers);
 			}
 			
-			if ($result['response']['message'] === 'Expired token' && $this->checkAndRenewToken()) {
+			if (
+				$result['status_code'] === 401 &&
+				$result['response']['errors'] === 'Expired token' &&
+				$this->checkAndRenewToken()
+			) {
 				return $this->apiRequest($url, $data, $method, $headers, $attempt + 1);
 			}
 			
@@ -551,14 +451,12 @@
 		 *
 		 * @return array An associative array containing the response data and status code of the POST request.
 		 */
-		private function curlPost(string $url, ?array $header = [], array $data = []): array {
+		private function curlPost(string $url, array $data = [], ?array $header = []): array {
 			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
 				$header[] = "Content-Type: application/json; charset: UTF-8";
 			}
-			
-			$data += $this->analytics;
 			
 			$dataString = json_encode($data);
 			
