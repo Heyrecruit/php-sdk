@@ -130,14 +130,7 @@
 			}
 			
 			$this->scope_url = $config['SCOPE_URL'];
-			
-			$urlObject = [
-				'scheme' => null,
-				'host'   => null,
-				'path'   => null,
-				'query'  => null
-			];
-			
+	
 			if (substr($this->scope_url, -1) === "/") {
 				$this->scope_url = rtrim($this->scope_url, "/");
 			}
