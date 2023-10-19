@@ -78,8 +78,8 @@
 			'company_location_ids' => [],
 			'departments'          => [],
 			'employments'          => [],
-			'internal_titles'       => [],
-			'language'             => 'de',
+			'internal_titles'      => [],
+			'language'             => null,
 			'search'               => null,
 			'address'              => null,
 			'area_search_distance' => 60000, // 60 km
@@ -130,7 +130,7 @@
 			}
 			
 			$this->scope_url = $config['SCOPE_URL'];
-	
+			
 			if (substr($this->scope_url, -1) === "/") {
 				$this->scope_url = rtrim($this->scope_url, "/");
 			}
@@ -228,17 +228,29 @@
 		 *
 		 */
 		public function setFilter(string $queryParams = ''): void {
-			if(!empty($queryParams)) {
-				$qs = preg_replace("/(?<=^|&)(\w+)(?==)/", "$1[]", $queryParams);
-				parse_str($qs, $newGET);
-				// Replace only the wanted keys
-				$this->filter = array_replace($this->filter, array_intersect_key($newGET, $this->filter));
+			// Check if query parameters are not empty
+			if (!empty($queryParams)) {
+				// Parse the query string into an associative array
+				parse_str($queryParams, $params);
 				
-				// Only one language allowed
-				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
-				// Only one address allowed
-				$this->filter['address'] = !empty($this->filter['address']) ? $this->filter['address'][0] : null;
-				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] == true ? 1 : 0;
+				// Filter the parameters to only those that exist in the current filter
+				$filteredParams = array_intersect_key($params, $this->filter);
+				
+				// Merge the filtered parameters with the current filter
+				$this->filter = array_merge($this->filter, $filteredParams);
+				
+				// If 'language' is set and is an array, ensure it contains only a single value by taking the first element
+				if (isset($this->filter['language']) && is_array($this->filter['language'])) {
+					$this->filter['language'] = $this->filter['language'][0];
+				}
+				
+				// If 'address' is set and is an array, ensure it contains only a single value by taking the first element
+				if (isset($this->filter['address']) && is_array($this->filter['address'])) {
+					$this->filter['address'] = $this->filter['address'][0];
+				}
+				
+				// Set 'preview' to 1 if it is true; otherwise, set it to 0
+				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] ? 1 : 0;
 			}
 		}
 		
@@ -413,6 +425,7 @@
 			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
 			$query['language'] = $this->filter['language'];
 			
+			
 			$queryData = http_build_query($query);
 			
 			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
@@ -423,6 +436,7 @@
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
 			
 			$response = curl_exec($curl);
+			
 			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 			
 			$result = json_decode($response, true);
@@ -485,69 +499,5 @@
 			echo "</pre>";
 			die;
 		}
-		
-		
-		
-		/*
-		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
-			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
-			
-			if($result['status_code'] === 401) {
-				if($this->authenticate()['success']) {
-					$this->saveApplicant($data, $jobId, $companyLocationId);
-				}
-			}
-			
-			return $result;
-		}
-		
-		/**
-		 * Uploads an applicant documents before or after submitting his data.
-		 * After the first successful upload, the api will response with the created applicantId.
-		 * If you want to upload a second document, use the applicantId
-		 *
-		 * @param array  $data              : The document data.
-		 * @param string $documentType      : The document type (picture | covering_letter | cv | certificate | other).
-		 * @param int    $jobId             : The job ID.
-		 * @param int    $companyLocationId : The ID of the company location that belongs to the job.
-		 * @param string $applicantId       : The applicant ID.
-		 *
-		 * @return array
-		 * @throws Exception
-		 */
-		
-		/*
-		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
-			
-			if(empty($data)) {
-				throw new Exception('Missing applicant data');
-			}
-			if(empty($documentType)) {
-				throw new Exception('Missing document type parameter');
-			}
-			if(empty($jobId)) {
-				throw new Exception('Missing job id parameter');
-			}
-			if(empty($companyLocationId)) {
-				throw new Exception('Missing company location id parameter');
-			}
-			
-			$url = !empty($applicantId)
-				? $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId . '/' . $applicantId
-				: $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId;
-			
-			$result = $this->curlPost($url, null, $data);
-			
-			if($result['status_code'] === 401) {
-				if($this->authenticate()['success']) {
-					$this->uploadDocument($data, $documentType, $jobId, $companyLocationId, $applicantId);
-				}
-			}
-			
-			return $result;
-		}
-		
-		*/
-		
 		
 	}
