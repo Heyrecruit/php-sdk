@@ -228,29 +228,17 @@
 		 *
 		 */
 		public function setFilter(string $queryParams = ''): void {
-			// Check if query parameters are not empty
-			if (!empty($queryParams)) {
-				// Parse the query string into an associative array
-				parse_str($queryParams, $params);
+			if(!empty($queryParams)) {
+				$qs = preg_replace("/(?<=^|&)(\w+)(?==)/", "$1[]", $queryParams);
+				parse_str($qs, $newGET);
+				// Replace only the wanted keys
+				$this->filter = array_replace($this->filter, array_intersect_key($newGET, $this->filter));
 				
-				// Filter the parameters to only those that exist in the current filter
-				$filteredParams = array_intersect_key($params, $this->filter);
-				
-				// Merge the filtered parameters with the current filter
-				$this->filter = array_merge($this->filter, $filteredParams);
-				
-				// If 'language' is set and is an array, ensure it contains only a single value by taking the first element
-				if (isset($this->filter['language']) && is_array($this->filter['language'])) {
-					$this->filter['language'] = $this->filter['language'][0];
-				}
-				
-				// If 'address' is set and is an array, ensure it contains only a single value by taking the first element
-				if (isset($this->filter['address']) && is_array($this->filter['address'])) {
-					$this->filter['address'] = $this->filter['address'][0];
-				}
-				
-				// Set 'preview' to 1 if it is true; otherwise, set it to 0
-				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] ? 1 : 0;
+				// Only one language allowed
+				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
+				// Only one address allowed
+				$this->filter['address'] = !empty($this->filter['address']) ? $this->filter['address'][0] : null;
+				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] == true ? 1 : 0;
 			}
 		}
 		
