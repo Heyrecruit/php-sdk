@@ -286,6 +286,7 @@
 			$url =  $this->url['get_jobs'];
 			
 			$this->filter['company'] = $companyId;
+			$this->filter['status'] = 1;
 			
 			return $this->apiRequest($url, $this->filter);
 		}
@@ -413,7 +414,6 @@
 			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
 			$query['language'] = $this->filter['language'];
 			
-			
 			$queryData = http_build_query($query);
 			
 			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
@@ -462,6 +462,7 @@
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			
 			$response = curl_exec($curl);
+			
 			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 			
 			$result = json_decode($response, true);
@@ -487,5 +488,69 @@
 			echo "</pre>";
 			die;
 		}
+		
+		
+		
+		/*
+		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
+			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
+			
+			if($result['status_code'] === 401) {
+				if($this->authenticate()['success']) {
+					$this->saveApplicant($data, $jobId, $companyLocationId);
+				}
+			}
+			
+			return $result;
+		}
+		
+		/**
+		 * Uploads an applicant documents before or after submitting his data.
+		 * After the first successful upload, the api will response with the created applicantId.
+		 * If you want to upload a second document, use the applicantId
+		 *
+		 * @param array  $data              : The document data.
+		 * @param string $documentType      : The document type (picture | covering_letter | cv | certificate | other).
+		 * @param int    $jobId             : The job ID.
+		 * @param int    $companyLocationId : The ID of the company location that belongs to the job.
+		 * @param string $applicantId       : The applicant ID.
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		
+		/*
+		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
+			
+			if(empty($data)) {
+				throw new Exception('Missing applicant data');
+			}
+			if(empty($documentType)) {
+				throw new Exception('Missing document type parameter');
+			}
+			if(empty($jobId)) {
+				throw new Exception('Missing job id parameter');
+			}
+			if(empty($companyLocationId)) {
+				throw new Exception('Missing company location id parameter');
+			}
+			
+			$url = !empty($applicantId)
+				? $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId . '/' . $applicantId
+				: $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId;
+			
+			$result = $this->curlPost($url, null, $data);
+			
+			if($result['status_code'] === 401) {
+				if($this->authenticate()['success']) {
+					$this->uploadDocument($data, $documentType, $jobId, $companyLocationId, $applicantId);
+				}
+			}
+			
+			return $result;
+		}
+		
+		*/
+		
 		
 	}
