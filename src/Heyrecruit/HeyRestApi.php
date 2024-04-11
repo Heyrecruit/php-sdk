@@ -7,7 +7,7 @@
 	 * @author        Oleg Mutzenberger
 	 * @email         oleg@artrevolver.de
 	 * @web           https://scope-recruiting.de
-	 * @copyright     Copyright 2023, Artrevolver GmbH
+	 * @copyright     Copyright 2024, Artrevolver GmbH
 	 * @license       http://opensource.org/licenses/mit-license.php MI
 	 *
 	 */
@@ -84,6 +84,7 @@
 			'address'              => null,
 			'area_search_distance' => 60000, // 60 km
 			'limit'                => 999,
+			'page'                 => 1,
 		];
 		
 		/**
@@ -238,6 +239,13 @@
 				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
 				// Only one address allowed
 				$this->filter['address'] = !empty($this->filter['address']) ? $this->filter['address'][0] : null;
+				
+				if(!empty($this->filter['page']) && is_array($this->filter['page'])) {
+					$this->filter['page'] = $this->filter['page'][0];
+				}else{
+					$this->filter['page'] = 1;
+				}
+				
 				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] == true ? 1 : 0;
 			}
 		}
@@ -294,11 +302,11 @@
 		/**
 		 *  Get one job.
 		 *
-		 * @param int|null $jobId
-		 * @param int|null $companyLocationId
+		 * @param int|null $companyId
+		 * @param int $jobId
+		 * @param int $companyLocationId
 		 *
 		 * @return array
-		 * @throws Exception
 		 */
 		public function getJob(int $companyId = null, int $jobId, int $companyLocationId): array {
 			
