@@ -104,7 +104,7 @@ class HeyRestApi {
      */
     private array $url = [
         'auth'                      => 'auth',
-        'get_company_credentials'   => 'getCompanyCredentials',
+        'get_company_credentials'   => 'get-credentials-by-subdomain',
         'get_company'               => 'companies/view',
         'get_company_by_sub_domain' => 'companies/view-by-domain',
         'get_jobs'                  => 'jobs/index',
@@ -199,8 +199,8 @@ class HeyRestApi {
      */
     private function getCompanyCredentialsForUseOwnUrl(int $clientId, string $domain): array {
 
-        return $this->curlPost($this->url['get_company_credentials'], [
-            'company_id' => $clientId,
+        return $this->curlGet($this->url['get_company_credentials'], [
+            'company' => $clientId,
             'sub_domain' => $domain
         ])['response']['data'] ?? [
             'SCOPE_CLIENT_ID'     => '',
