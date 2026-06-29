@@ -107,6 +107,7 @@
 			'get_company_by_sub_domain' => 'companies/view-by-domain',
 			'get_jobs'                  => 'jobs/index',
 			'get_job'                   => 'jobs/view',
+			'get_appointment'           => 'appointments/by-token',
 			'apply'                     => 'applicant-jobs/apply',
 			'upload_documents'          => 'rest-applicants/uploadDocument',
 			'delete_documents'          => 'rest-applicants/deleteDocument',
@@ -317,6 +318,20 @@
 				'job_id'              => $jobId,
 				'company_location_id' => $companyLocationId,
 			]);
+		}
+
+		/**
+		 *  Get the RSVP appointment landing data for a token.
+		 *
+		 * @param string $token
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function getAppointmentByToken(string $token): array {
+			$url = $this->url['get_appointment'];
+
+			return $this->apiRequest($url, ['token' => $token]);
 		}
 		
 		/**
