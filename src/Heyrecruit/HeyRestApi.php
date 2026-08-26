@@ -108,6 +108,7 @@
 			'get_jobs'                  => 'jobs/index',
 			'get_job'                   => 'jobs/view',
 			'get_appointment'           => 'appointments/by-token',
+			'respond_appointment'       => 'appointments/respond',
 			'apply'                     => 'applicant-jobs/apply',
 			'upload_documents'          => 'rest-applicants/uploadDocument',
 			'delete_documents'          => 'rest-applicants/deleteDocument',
@@ -332,6 +333,22 @@
 			$url = $this->url['get_appointment'];
 
 			return $this->apiRequest($url, ['token' => $token]);
+		}
+
+		/**
+		 *  Send the applicant's RSVP answer for a token. POST, because it changes state — a link must not
+		 *  trigger it (mail scanners, prefetch).
+		 *
+		 * @param string $token
+		 * @param string $action 'confirm' or 'decline'
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function respondToAppointment(string $token, string $action): array {
+			$url = $this->url['respond_appointment'];
+
+			return $this->apiRequest($url, ['token' => $token, 'action' => $action], 'POST');
 		}
 		
 		/**
