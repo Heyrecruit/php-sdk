@@ -1,0 +1,3 @@
+# Das Repo speichert LF. Ohne diese Regel entscheidet die lokale core.autocrlf-Einstellung,
+# und eine Arbeitskopie ohne sie committet CRLF - ein Diff ueber jede Zeile.
+* text=auto eol=lf

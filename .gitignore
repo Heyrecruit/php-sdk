@@ -1,6 +1,4 @@
 # Created by .ignore support plugin (hsz.mobi)
-### Example user template template
-### Example user template
 
 # IntelliJ project files
 .idea
@@ -8,11 +6,9 @@
 out
 gen
 .idea/
+
 .env
-tests/*
-tests/
-phpDocumentor.phar
-phpDocumentor.phar/*
-phpDocumentor.phar.pubkey
-
-
+/vendor/
+composer.lock
+.phpunit.result.cache
+.phpunit.cache/

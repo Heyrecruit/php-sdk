@@ -1,5 +1,5 @@
 {
-  "name": "heyrecruit/php-sdk",
+  "name": "werbeagentur_artrevolver/scope-php-sdk",
   "description": "PHP SDK for implementing Heyrecruit with rest api.",
   "homepage": "https://heyrecruit.de",
   "keywords": [
@@ -21,9 +21,11 @@
       "homepage": "https://heyrecruit.de"
     }
   ],
-  "type": "project",
+  "type": "library",
   "require": {
-    "php": "^7.4||^8.0"
+    "php": "^7.4||^8.0",
+    "ext-curl": "*",
+    "ext-json": "*"
   },
   "autoload": {
     "psr-4": {
