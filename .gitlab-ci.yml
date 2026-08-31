@@ -1,0 +1,26 @@
+stages:
+  - test
+
+default:
+  image: php:8.3-cli
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git unzip libzip-dev > /dev/null
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - composer install --no-interaction --no-progress --prefer-dist
+
+lint:
+  stage: test
+  script:
+    - find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
+
+phpunit:
+  stage: test
+  script:
+    - vendor/bin/phpunit --colors=never
+
+# Die Bibliothek gibt php ^8.1 an - die Untergrenze wird mitgetestet.
+phpunit:php81:
+  stage: test
+  image: php:8.1-cli
+  script:
+    - vendor/bin/phpunit --colors=never
