@@ -54,7 +54,10 @@
 			'client_secret' => null
 		];
 		
-		private $maxFailRequest = 3;
+		private const MAX_AUTH_RETRIES            = 3;
+		private const CONNECT_TIMEOUT_SECONDS     = 5;
+		private const REQUEST_TIMEOUT_SECONDS     = 15;
+		private const TOKEN_EXPIRY_MARGIN_SECONDS = 60;
 		
 		/**
 		 * Job filter data submitted with get jobs request.
@@ -170,33 +173,39 @@
 		 * @return array
 		 * @throws Exception
 		 */
-		public function authenticate(): array {
-			$auth = $_SESSION['HEY_AUTH'] ?? [];
-			if (!empty($auth) && $auth['expiration'] > time()) {
-				$this->auth = $auth;
-				return ['status' => 'success', 'data' => $auth];
+		public function authenticate(bool $force = false): array {
+			if (!$force) {
+				$cached = $this->readCachedAuth();
+				
+				if ($cached !== null) {
+					$this->auth = $cached;
+					return ['status' => 'success', 'data' => $cached];
+				}
 			}
 			
-			$curl = curl_init($this->scope_url . DS . $this->url['auth']);
+			$curl = curl_init($this->endpoint($this->url['auth']));
 			
 			curl_setopt_array($curl, [
 				CURLOPT_RETURNTRANSFER => true,
-				CURLOPT_POSTFIELDS => $this->auth_config
+				CURLOPT_POSTFIELDS     => $this->auth_config,
+				CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT_SECONDS,
+				CURLOPT_TIMEOUT        => self::REQUEST_TIMEOUT_SECONDS,
 			]);
 			
-			$response = curl_exec($curl);
+			$result = $this->execute($curl);
 			
-			$result = json_decode($response, true);
-			
-			curl_close($curl);
-			
-			if ($result['status'] === 'success') {
-				$this->auth = $result['data'];
-				$_SESSION['HEY_AUTH'] = $this->auth;
-				return $result;
+			if (($result['response']['status'] ?? null) === 'success' && is_array($result['response']['data'] ?? null)) {
+				$auth = $result['response']['data'];
+				// Sicherheitsabstand einmal hier abziehen, damit Session-Cache und Instanz denselben Wert tragen.
+				$auth['expiration'] = (int)($auth['expiration'] ?? 0) - self::TOKEN_EXPIRY_MARGIN_SECONDS;
+				
+				$this->auth = $auth;
+				$this->writeCachedAuth($auth);
+				
+				return $result['response'];
 			}
 			
-			throw new Exception('Auth error! Message from Heyrecruit: ' . $result['message']);
+			throw new Exception('Auth error! Message from Heyrecruit: ' . $this->describeFailure($result));
 		}
 		
 		/**
@@ -206,17 +215,9 @@
 		 *
 		 * @throws Exception if an error occurs while authenticating or renewing the access token.
 		 */
-		private function checkAndRenewToken(): bool {
-			if ($this->auth['expiration'] < time()) {
-				$authResult = $this->authenticate();
-				
-				if ($authResult['status'] === 'success') {
-					$this->auth['token']      = $authResult['data']['token'];
-					$this->auth['expiration'] = $authResult['data']['expiration'] - 60;
-					return true;
-				}
-				
-				return false;
+		private function checkAndRenewToken(bool $force = false): bool {
+			if ($force || (int)($this->auth['expiration'] ?? 0) < time()) {
+				return ($this->authenticate($force)['status'] ?? null) === 'success';
 			}
 			
 			return true;
@@ -240,15 +241,13 @@
 				// Only one language allowed
 				$this->filter['language'] = is_array($this->filter['language']) ? $this->filter['language'][0] : $this->filter['language'];
 				// Only one address allowed
-				$this->filter['address'] = !empty($this->filter['address']) ? $this->filter['address'][0] : null;
+				$this->filter['address'] = is_array($this->filter['address']) ? ($this->filter['address'][0] ?? null) : $this->filter['address'];
 				
 				if(!empty($this->filter['page']) && is_array($this->filter['page'])) {
 					$this->filter['page'] = $this->filter['page'][0];
 				}else{
 					$this->filter['page'] = 1;
 				}
-				
-				$this->filter['preview'] = isset($this->filter['preview']) && $this->filter['preview'] == true ? 1 : 0;
 			}
 		}
 		
@@ -292,7 +291,7 @@
 		 * @return array
 		 * @throws Exception
 		 */
-		public function getJobs(int $companyId = null): array {
+		public function getJobs(?int $companyId = null): array {
 			$url =  $this->url['get_jobs'];
 			
 			$this->filter['company'] = $companyId;
@@ -310,7 +309,7 @@
 		 *
 		 * @return array
 		 */
-		public function getJob(int $companyId = null, int $jobId, int $companyLocationId): array {
+		public function getJob(?int $companyId, int $jobId, int $companyLocationId): array {
 			
 			$url =  $this->url['get_job'];
 			
@@ -372,14 +371,14 @@
 					"new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0], " .
 					"j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src= " .
 					"'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f); " .
-					"})(window,document,'script','dataLayer', '" .
-					$publicId . "');</script> " .
+					"})(window,document,'script','dataLayer', " .
+					$this->jsString($publicId) . ");</script> " .
 					"<!-- End Google Tag Manager -->";
 				
 				$tagCode['body'] =
 					'<!-- Google Tag Manager (noscript) -->' .
 					'<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' .
-					$publicId . '" ' .
+					htmlspecialchars(rawurlencode($publicId), ENT_QUOTES, 'UTF-8') . '" ' .
 					'height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript> ' .
 					'<!-- End Google Tag Manager (noscript) -->';
 			}
@@ -410,7 +409,7 @@
 		 * @throws Exception
 		 */
 		private function apiRequest(string $url, array $data = [], string $method = 'GET', array $headers = [], int $attempt = 1): array {
-			if ($attempt > 3) {
+			if ($attempt > self::MAX_AUTH_RETRIES) {
 				return ['status_code' => 401, 'success' => false, 'message' => 'Auth error! Max retry limit exceeded!'];
 			}
 			
@@ -424,12 +423,14 @@
 				$result = $this->curlPost($url, $data, $headers);
 			}
 			
-			if (
-				$result['status_code'] === 401 &&
-				$result['response']['errors'] === 'Expired token' &&
-				$this->checkAndRenewToken()
-			) {
-				return $this->apiRequest($url, $data, $method, $headers, $attempt + 1);
+			if ($result['status_code'] === 401 && ($result['response']['errors'] ?? null) === 'Expired token') {
+				// Der Server lehnt den Token ab, obwohl die gespeicherte Laufzeit noch gilt
+				// (Uhren-Differenz, rotiertes Secret) - Cache verwerfen und neu authentifizieren.
+				$this->clearCachedAuth();
+				
+				if ($this->checkAndRenewToken(true)) {
+					return $this->apiRequest($url, $data, $method, $headers, $attempt + 1);
+				}
 			}
 			
 			return $result;
@@ -448,33 +449,23 @@
 			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
-				$header[] = "Content-Type: application/json; charset: UTF-8";
+				$header[] = "Content-Type: application/json; charset=UTF-8";
 			}
 			
-			$query['ip']       = urlencode($_SERVER['REMOTE_ADDR']);
+			// http_build_query kodiert selbst - ein vorheriges urlencode() ergaebe %253A statt %3A.
+			$query['ip']       = $_SERVER['REMOTE_ADDR'] ?? '';
 			$query['language'] = $this->filter['language'];
 			
-			$queryData = http_build_query($query);
+			$separator = strpos($url, '?') !== false ? '&' : '?';
 			
-			$query = strpos($url, '?') !== false ? '&' . $queryData : '?' . $queryData;
-			
-			$curl = curl_init($this->scope_url . DS . $url . $query);
+			$curl = curl_init($this->endpoint($url) . $separator . http_build_query($query));
 			
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
+			curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, self::CONNECT_TIMEOUT_SECONDS);
+			curl_setopt($curl, CURLOPT_TIMEOUT, self::REQUEST_TIMEOUT_SECONDS);
 			
-			$response = curl_exec($curl);
-			
-			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-			
-			$result = json_decode($response, true);
-			
-			curl_close($curl);
-			
-			return array(
-				'response'    => $result,
-				'status_code' => $httpCode,
-			);
+			return $this->execute($curl);
 		}
 		
 		/**
@@ -490,29 +481,20 @@
 			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
-				$header[] = "Content-Type: application/json; charset: UTF-8";
+				$header[] = "Content-Type: application/json; charset=UTF-8";
 			}
 			
 			$dataString = json_encode($data);
 			
-			$curl = curl_init($this->scope_url . DS . $url);
+			$curl = curl_init($this->endpoint($url));
 			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
 			curl_setopt($curl, CURLOPT_POSTFIELDS, $dataString);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, self::CONNECT_TIMEOUT_SECONDS);
+			curl_setopt($curl, CURLOPT_TIMEOUT, self::REQUEST_TIMEOUT_SECONDS);
 			
-			$response = curl_exec($curl);
-			
-			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-			
-			$result = json_decode($response, true);
-			
-			curl_close($curl);
-			
-			return array(
-				'response'    => $result,
-				'status_code' => $httpCode,
-			);
+			return $this->execute($curl);
 		}
 		
 		/**
@@ -531,66 +513,106 @@
 		
 		
 		
-		/*
-		public function saveApplicant(array $data, int $jobId, int $companyLocationId): array {
-			$result = $this->curlPost($this->url['add_applicant'] . '/' . $jobId . '/' . $companyLocationId, null, $data);
-			
-			if($result['status_code'] === 401) {
-				if($this->authenticate()['success']) {
-					$this->saveApplicant($data, $jobId, $companyLocationId);
-				}
-			}
-			
-			return $result;
-		}
-		
 		/**
-		 * Uploads an applicant documents before or after submitting his data.
-		 * After the first successful upload, the api will response with the created applicantId.
-		 * If you want to upload a second document, use the applicantId
+		 * Baut die vollstaendige Endpunkt-URL.
 		 *
-		 * @param array  $data              : The document data.
-		 * @param string $documentType      : The document type (picture | covering_letter | cv | certificate | other).
-		 * @param int    $jobId             : The job ID.
-		 * @param int    $companyLocationId : The ID of the company location that belongs to the job.
-		 * @param string $applicantId       : The applicant ID.
+		 * @param string $path The endpoint path.
 		 *
-		 * @return array
-		 * @throws Exception
+		 * @return string
 		 */
-		
-		/*
-		public function uploadDocument(array $data, string $documentType, int $jobId, int $companyLocationId, string $applicantId = '') {
-			
-			if(empty($data)) {
-				throw new Exception('Missing applicant data');
-			}
-			if(empty($documentType)) {
-				throw new Exception('Missing document type parameter');
-			}
-			if(empty($jobId)) {
-				throw new Exception('Missing job id parameter');
-			}
-			if(empty($companyLocationId)) {
-				throw new Exception('Missing company location id parameter');
-			}
-			
-			$url = !empty($applicantId)
-				? $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId . '/' . $applicantId
-				: $this->scope_url . $this->url['upload_documents'] . '/' . $documentType . '/' . $jobId . '/' . $companyLocationId;
-			
-			$result = $this->curlPost($url, null, $data);
-			
-			if($result['status_code'] === 401) {
-				if($this->authenticate()['success']) {
-					$this->uploadDocument($data, $documentType, $jobId, $companyLocationId, $applicantId);
-				}
-			}
-			
-			return $result;
+		private function endpoint(string $path): string {
+			return rtrim($this->scope_url, '/') . '/' . ltrim($path, '/');
 		}
-		
-		*/
-		
-		
+
+		/**
+		 * Fuehrt einen vorbereiteten cURL-Handle aus und dekodiert die Antwort.
+		 *
+		 * @param resource|\CurlHandle $curl The prepared cURL handle.
+		 *
+		 * @return array ['response' => array|null, 'status_code' => int, 'error' => string|null]
+		 */
+		private function execute($curl): array {
+			$response  = curl_exec($curl);
+			$httpCode  = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+			$curlError = curl_errno($curl) !== 0 ? curl_error($curl) : null;
+
+			if ($curlError !== null) {
+				return ['response' => null, 'status_code' => 0, 'error' => $curlError];
+			}
+
+			$decoded = is_string($response) ? json_decode($response, true) : null;
+
+			return [
+				'response'    => is_array($decoded) ? $decoded : null,
+				'status_code' => $httpCode,
+				'error'       => is_array($decoded) ? null : 'Malformed response body.',
+			];
+		}
+
+		/**
+		 * Beschreibt einen fehlgeschlagenen Request fuer die Fehlermeldung.
+		 *
+		 * @param array $result The result of execute().
+		 *
+		 * @return string
+		 */
+		private function describeFailure(array $result): string {
+			return (string)($result['response']['message']
+				?? $result['error']
+				?? 'HTTP ' . $result['status_code']);
+		}
+
+		/**
+		 * Kodiert einen Wert als JS-String-Literal inklusive Anfuehrungszeichen.
+		 *
+		 * @param string $value The value to encode.
+		 *
+		 * @return string
+		 */
+		private function jsString(string $value): string {
+			return json_encode($value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?: "''";
+		}
+
+		/**
+		 * Liest gueltige Auth-Daten aus der Session.
+		 *
+		 * @return array|null
+		 */
+		private function readCachedAuth(): ?array {
+			if (session_status() !== PHP_SESSION_ACTIVE) {
+				return null;
+			}
+
+			$auth = $_SESSION['HEY_AUTH'] ?? null;
+
+			if (!is_array($auth) || empty($auth['token']) || (int)($auth['expiration'] ?? 0) <= time()) {
+				return null;
+			}
+
+			return $auth;
+		}
+
+		/**
+		 * Legt die Auth-Daten in der Session ab, sofern eine Session laeuft.
+		 *
+		 * @param array $auth The auth data to cache.
+		 *
+		 * @return void
+		 */
+		private function writeCachedAuth(array $auth): void {
+			if (session_status() === PHP_SESSION_ACTIVE) {
+				$_SESSION['HEY_AUTH'] = $auth;
+			}
+		}
+
+		/**
+		 * Verwirft die zwischengespeicherten Auth-Daten.
+		 *
+		 * @return void
+		 */
+		private function clearCachedAuth(): void {
+			if (session_status() === PHP_SESSION_ACTIVE) {
+				unset($_SESSION['HEY_AUTH']);
+			}
+		}
 	}
