@@ -1,6 +1,6 @@
 <?php
 	/**
-	 * Class ScopeRestApi
+	 * Class HeyRestApi
 	 *
 	 * A sample class to communicate with the heyrecruit rest api
 	 *
@@ -19,7 +19,7 @@
 	use InvalidArgumentException;
 	
 	/**
-	 * Class ScopeRestApi
+	 * Class HeyRestApi
 	 *
 	 */
 	class HeyRestApi {
