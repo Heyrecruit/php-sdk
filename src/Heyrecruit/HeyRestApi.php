@@ -57,6 +57,9 @@
 		private const MAX_AUTH_RETRIES            = 3;
 		private const CONNECT_TIMEOUT_SECONDS     = 5;
 		private const REQUEST_TIMEOUT_SECONDS     = 15;
+		// Bewerbung laeuft serverseitig synchron (Upload, Mails, Webhook, CV-Analyse): live p99 26 s,
+		// 2 % ueber 15 s (22.09.-06.10.2026). Unter den 60 s des Portal-nginx, sonst 504 + Retry.
+		private const APPLY_TIMEOUT_SECONDS       = 50;
 		private const TOKEN_EXPIRY_MARGIN_SECONDS = 60;
 		
 		/**
@@ -253,7 +256,7 @@
 		
 		public function apply(array $data): array {
 			$url =  $this->url['apply'];
-			return $this->apiRequest($url, $data, 'POST');
+			return $this->apiRequest($url, $data, 'POST', [], 1, self::APPLY_TIMEOUT_SECONDS);
 		}
 		
 		/**
@@ -403,12 +406,14 @@
 		 * @param array $data The data to send in the API request (optional).
 		 * @param string $method The HTTP method to use for the API request (default is 'GET').
 		 * @param array $headers The headers to send in the API request (optional).
+		 * @param int $attempt Auth retry counter (internal).
+		 * @param int $timeout Total request timeout in seconds.
 		 *
 		 * @return array An associative array containing the API response status code, success status, and data.
 		 *               If the authentication fails, returns an error message with a status code of 401.
 		 * @throws Exception
 		 */
-		private function apiRequest(string $url, array $data = [], string $method = 'GET', array $headers = [], int $attempt = 1): array {
+		private function apiRequest(string $url, array $data = [], string $method = 'GET', array $headers = [], int $attempt = 1, int $timeout = self::REQUEST_TIMEOUT_SECONDS): array {
 			if ($attempt > self::MAX_AUTH_RETRIES) {
 				return ['status_code' => 401, 'success' => false, 'message' => 'Auth error! Max retry limit exceeded!'];
 			}
@@ -418,9 +423,9 @@
 			}
 			
 			if($method === 'GET') {
-				$result = $this->curlGet($url, $data, $headers);
+				$result = $this->curlGet($url, $data, $headers, $timeout);
 			}else{
-				$result = $this->curlPost($url, $data, $headers);
+				$result = $this->curlPost($url, $data, $headers, $timeout);
 			}
 			
 			if ($result['status_code'] === 401 && ($result['response']['errors'] ?? null) === 'Expired token') {
@@ -429,7 +434,7 @@
 				$this->clearCachedAuth();
 				
 				if ($this->checkAndRenewToken(true)) {
-					return $this->apiRequest($url, $data, $method, $headers, $attempt + 1);
+					return $this->apiRequest($url, $data, $method, $headers, $attempt + 1, $timeout);
 				}
 			}
 			
@@ -442,10 +447,11 @@
 		 * @param string $url The URL to send the GET request to.
 		 * @param array|null $query The query parameters to include in the GET request (optional).
 		 * @param array|null $header The headers to include in the GET request (optional).
+		 * @param int $timeout Total request timeout in seconds.
 		 *
 		 * @return array An associative array containing the response data and status code of the GET request.
 		 */
-		private function curlGet(string $url, ?array $query = [], ?array $header = []): array {
+		private function curlGet(string $url, ?array $query = [], ?array $header = [], int $timeout = self::REQUEST_TIMEOUT_SECONDS): array {
 			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
@@ -463,7 +469,7 @@
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
 			curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, self::CONNECT_TIMEOUT_SECONDS);
-			curl_setopt($curl, CURLOPT_TIMEOUT, self::REQUEST_TIMEOUT_SECONDS);
+			curl_setopt($curl, CURLOPT_TIMEOUT, $timeout);
 			
 			return $this->execute($curl);
 		}
@@ -474,10 +480,11 @@
 		 * @param string $url The URL to send the POST request to.
 		 * @param array|null $header The headers to include in the POST request (optional).
 		 * @param array $data The data to send in the POST request (optional).
+		 * @param int $timeout Total request timeout in seconds.
 		 *
 		 * @return array An associative array containing the response data and status code of the POST request.
 		 */
-		private function curlPost(string $url, array $data = [], ?array $header = []): array {
+		private function curlPost(string $url, array $data = [], ?array $header = [], int $timeout = self::REQUEST_TIMEOUT_SECONDS): array {
 			
 			if(empty($header)) {
 				$header[] = "Authorization: Bearer " . $this->auth['token'];
@@ -492,7 +499,7 @@
 			curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, self::CONNECT_TIMEOUT_SECONDS);
-			curl_setopt($curl, CURLOPT_TIMEOUT, self::REQUEST_TIMEOUT_SECONDS);
+			curl_setopt($curl, CURLOPT_TIMEOUT, $timeout);
 			
 			return $this->execute($curl);
 		}
