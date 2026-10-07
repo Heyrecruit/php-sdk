@@ -35,6 +35,10 @@
 		/** Wie oft ein Request nach einer Token-Erneuerung wiederholt wird. */
 		private const MAX_AUTH_RETRIES = 3;
 
+		// Bewerbung laeuft serverseitig synchron (Upload, Mails, Webhook, CV-Analyse): live p99 26 s,
+		// 2 % ueber 15 s (22.09.-06.10.2026). Unter den 60 s des Portal-nginx, sonst 504 + Retry.
+		private const APPLY_TIMEOUT_SECONDS = 50;
+
 		/**
 		 * API request url.
 		 *
@@ -154,7 +158,7 @@
 		 * @throws Exception
 		 */
 		public function apply(array $data): array {
-			return $this->apiRequest($this->url['apply'], $data, 'POST');
+			return $this->apiRequest($this->url['apply'], $data, 'POST', self::APPLY_TIMEOUT_SECONDS);
 		}
 
 		/**
@@ -261,15 +265,16 @@
 		/**
 		 * Performs an API request and renews the access token when the API reports it as expired.
 		 *
-		 * @param string $url     The endpoint path.
-		 * @param array  $data    The payload or query parameters.
-		 * @param string $method  The HTTP method.
-		 * @param int    $attempt The current attempt, starting at 1.
+		 * @param string   $url            The endpoint path.
+		 * @param array    $data           The payload or query parameters.
+		 * @param string   $method         The HTTP method.
+		 * @param int|null $timeoutSeconds Overall timeout for a POST, null for the transport default.
+		 * @param int      $attempt        The current attempt, starting at 1.
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		private function apiRequest(string $url, array $data = [], string $method = 'GET', int $attempt = 1): array {
+		private function apiRequest(string $url, array $data = [], string $method = 'GET', ?int $timeoutSeconds = null, int $attempt = 1): array {
 			if ($attempt > self::MAX_AUTH_RETRIES) {
 				// Gleiche Antwortform wie im Normalfall - bis 2.x kam hier ein abweichendes Array.
 				return (new ApiResponse(401, null, 'Auth error! Max retry limit exceeded!'))->toArray();
@@ -284,7 +289,7 @@
 
 			$response = $method === 'GET'
 				? $this->transport->get($url, array_merge($data, $this->requestContext()), $requestHeaders)
-				: $this->transport->post($url, $data, $requestHeaders);
+				: $this->transport->post($url, $data, $requestHeaders, $timeoutSeconds);
 
 			if ($response->isExpiredToken()) {
 				// Der Server lehnt den Token ab, obwohl die gespeicherte Laufzeit noch gilt
@@ -292,7 +297,7 @@
 				$this->authenticator->forget();
 				$this->authenticator->token(true);
 
-				return $this->apiRequest($url, $data, $method, $attempt + 1);
+				return $this->apiRequest($url, $data, $method, $timeoutSeconds, $attempt + 1);
 			}
 
 			return $response->toArray();

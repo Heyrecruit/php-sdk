@@ -11,7 +11,7 @@ use Heyrecruit\Http\Transport;
  */
 final class FakeTransport implements Transport {
 
-	/** @var list<array{method: string, path: string, payload: array, headers: array}> */
+	/** @var list<array{method: string, path: string, payload: array, headers: array, timeout: int|null}> */
 	public array $calls = [];
 
 	/** @var list<ApiResponse> Antworten fuer get() und post(). */
@@ -89,8 +89,8 @@ final class FakeTransport implements Transport {
 	/**
 	 * @inheritDoc
 	 */
-	public function post(string $path, array $data = [], array $headers = []): ApiResponse {
-		return $this->record('POST', $path, $data, $headers, $this->queue);
+	public function post(string $path, array $data = [], array $headers = [], ?int $timeoutSeconds = null): ApiResponse {
+		return $this->record('POST', $path, $data, $headers, $this->queue, null, $timeoutSeconds);
 	}
 
 	/**
@@ -105,7 +105,7 @@ final class FakeTransport implements Transport {
 	 *
 	 * @param string $path The endpoint path.
 	 *
-	 * @return list<array{method: string, path: string, payload: array, headers: array}>
+	 * @return list<array{method: string, path: string, payload: array, headers: array, timeout: int|null}>
 	 */
 	public function callsTo(string $path): array {
 		return array_values(array_filter($this->calls, static fn (array $call): bool => $call['path'] === $path));
@@ -118,11 +118,12 @@ final class FakeTransport implements Transport {
 	 * @param array            $headers  The header lines.
 	 * @param list<ApiResponse> $queue   The queue to draw from, by reference.
 	 * @param ApiResponse|null $fallback Overrides the instance fallback.
+	 * @param int|null         $timeout  The per-request timeout passed to post().
 	 *
 	 * @return ApiResponse
 	 */
-	private function record(string $method, string $path, array $payload, array $headers, array &$queue, ?ApiResponse $fallback = null): ApiResponse {
-		$this->calls[] = ['method' => $method, 'path' => $path, 'payload' => $payload, 'headers' => $headers];
+	private function record(string $method, string $path, array $payload, array $headers, array &$queue, ?ApiResponse $fallback = null, ?int $timeout = null): ApiResponse {
+		$this->calls[] = ['method' => $method, 'path' => $path, 'payload' => $payload, 'headers' => $headers, 'timeout' => $timeout];
 
 		return array_shift($queue) ?? $fallback ?? $this->fallback;
 	}

@@ -229,6 +229,35 @@ final class HeyRestApiTest extends TestCase {
 		$this->assertSame($payload, $call['payload']);
 	}
 
+	public function testApplyGetsItsOwnLongerTimeout(): void {
+		$transport = new FakeTransport();
+
+		$this->api($transport)->apply(['job_id' => 3]);
+
+		// Die Bewerbung laeuft serverseitig synchron und braucht live bis zu 26 s (p99).
+		$this->assertSame(50, $transport->callsTo('applicant-jobs/apply')[0]['timeout']);
+	}
+
+	public function testApplyKeepsItsTimeoutOnTheRetryAfterAnExpiredToken(): void {
+		$transport = new FakeTransport();
+		$transport->queueAuth(FakeTransport::authSuccess('old'), FakeTransport::authSuccess('new'));
+		$transport->queue(FakeTransport::expiredToken(), new ApiResponse(200, ['status' => 'success', 'data' => []]));
+
+		$this->api($transport)->apply(['job_id' => 3]);
+
+		$calls = $transport->callsTo('applicant-jobs/apply');
+		$this->assertCount(2, $calls);
+		$this->assertSame(50, $calls[1]['timeout']);
+	}
+
+	public function testOtherPostsKeepTheTransportDefaultTimeout(): void {
+		$transport = new FakeTransport();
+
+		$this->api($transport)->respondToAppointment('tok', 'confirm');
+
+		$this->assertNull($transport->callsTo('appointments/respond')[0]['timeout']);
+	}
+
 	public function testGetJobSendsAllThreeIdentifiers(): void {
 		$transport = new FakeTransport();
 

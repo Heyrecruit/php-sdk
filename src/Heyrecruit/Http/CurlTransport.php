@@ -40,17 +40,18 @@ final class CurlTransport implements Transport {
 	 * Die cURL-Optionen eines Requests. Oeffentlich, weil sich nur so pruefen laesst, dass die
 	 * Timeouts wirklich gesetzt werden - curl bietet keine Introspektion eines Handles.
 	 *
-	 * @param array $headers Complete header lines.
-	 * @param array $extra   Method specific options, taking precedence.
+	 * @param array    $headers        Complete header lines.
+	 * @param array    $extra          Method specific options, taking precedence.
+	 * @param int|null $timeoutSeconds Overall timeout for this request, null for the instance default.
 	 *
 	 * @return array
 	 */
-	public function requestOptions(array $headers = [], array $extra = []): array {
+	public function requestOptions(array $headers = [], array $extra = [], ?int $timeoutSeconds = null): array {
 		return $extra + [
 			CURLOPT_RETURNTRANSFER => true,
 			CURLOPT_HTTPHEADER     => $headers,
 			CURLOPT_CONNECTTIMEOUT => $this->connectTimeoutSeconds,
-			CURLOPT_TIMEOUT        => $this->requestTimeoutSeconds,
+			CURLOPT_TIMEOUT        => $timeoutSeconds ?? $this->requestTimeoutSeconds,
 		];
 	}
 
@@ -67,11 +68,11 @@ final class CurlTransport implements Transport {
 	/**
 	 * @inheritDoc
 	 */
-	public function post(string $path, array $data = [], array $headers = []): ApiResponse {
+	public function post(string $path, array $data = [], array $headers = [], ?int $timeoutSeconds = null): ApiResponse {
 		return $this->send($this->endpoint($path), $this->requestOptions($headers, [
 			CURLOPT_CUSTOMREQUEST => 'POST',
 			CURLOPT_POSTFIELDS    => (string)json_encode($data),
-		]));
+		], $timeoutSeconds));
 	}
 
 	/**

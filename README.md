@@ -113,7 +113,8 @@ Every endpoint method returns the same envelope:
 ]
 ```
 
-Requests use a 5 second connect timeout and a 15 second overall timeout. On HTTP 401 with an
+Requests use a 5 second connect timeout and a 15 second overall timeout; `apply()` gets 50 seconds,
+because the API processes an application synchronously. On HTTP 401 with an
 expired token the SDK discards the cached token, re-authenticates and retries — up to three
 attempts in total.
 

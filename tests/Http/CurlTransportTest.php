@@ -34,6 +34,13 @@ final class CurlTransportTest extends TestCase {
 		$this->assertSame(2, $options[CURLOPT_TIMEOUT]);
 	}
 
+	public function testPerRequestTimeoutOverridesTheDefaultButNotTheConnectTimeout(): void {
+		$options = (new CurlTransport('https://example.test', 3, 4))->requestOptions([], [], 50);
+
+		$this->assertSame(3, $options[CURLOPT_CONNECTTIMEOUT]);
+		$this->assertSame(50, $options[CURLOPT_TIMEOUT]);
+	}
+
 	public function testHeadersAndReturnTransferAreAlwaysSet(): void {
 		$options = (new CurlTransport('https://example.test'))->requestOptions(['X-Test: 1']);
 
@@ -91,6 +98,21 @@ final class CurlTransportTest extends TestCase {
 
 		$this->assertSame(0, $response->statusCode);
 		$this->assertNotNull($response->error);
+	}
+
+	public function testPostAppliesThePerRequestTimeoutToTheRealHandle(): void {
+		// Der Socket nimmt Verbindungen an (Backlog), antwortet aber nie - curl laeuft in den Gesamt-Timeout.
+		$server = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+		$this->assertNotFalse($server, $errstr);
+		$transport = new CurlTransport('http://' . stream_socket_get_name($server, false), 1, 4);
+
+		$start    = microtime(true);
+		$response = $transport->post('applicant-jobs/apply', ['a' => 1], [], 1);
+		$elapsed  = microtime(true) - $start;
+		fclose($server);
+
+		$this->assertSame(0, $response->statusCode);
+		$this->assertLessThan(3.0, $elapsed, 'post() muss den Timeout je Request an curl weitergeben.');
 	}
 
 	public function testUnreachableHostOnAuthBecomesATransportError(): void {

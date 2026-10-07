@@ -18,13 +18,14 @@ interface Transport {
 	public function get(string $path, array $query = [], array $headers = []): ApiResponse;
 
 	/**
-	 * @param string $path    The endpoint path, relative to the API base URL.
-	 * @param array  $data    Payload, sent as a JSON body.
-	 * @param array  $headers Complete header lines.
+	 * @param string   $path           The endpoint path, relative to the API base URL.
+	 * @param array    $data           Payload, sent as a JSON body.
+	 * @param array    $headers        Complete header lines.
+	 * @param int|null $timeoutSeconds Overall timeout for this request, null for the transport default.
 	 *
 	 * @return ApiResponse
 	 */
-	public function post(string $path, array $data = [], array $headers = []): ApiResponse;
+	public function post(string $path, array $data = [], array $headers = [], ?int $timeoutSeconds = null): ApiResponse;
 
 	/**
 	 * Sendet ein klassisches Formular-POST - der Auth-Endpunkt erwartet keine JSON-Payload.
