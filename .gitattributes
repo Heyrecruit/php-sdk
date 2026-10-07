@@ -1,3 +1,9 @@
-# Das Repo speichert LF. Ohne diese Regel entscheidet die lokale core.autocrlf-Einstellung,
-# und eine Arbeitskopie ohne sie committet CRLF - ein Diff ueber jede Zeile.
+# Ab 3.0 liegen alle Dateien mit LF im Repo. Ohne diese Regel normalisiert eine
+# Arbeitskopie mit core.autocrlf=true beim Commit und erzeugt Diffs ueber jede Zeile.
 * text=auto eol=lf
+
+# Nicht ausliefern - haelt das Composer-Paket klein.
+/tests export-ignore
+/phpunit.xml export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
