@@ -218,6 +218,26 @@ final class HeyRestApiTest extends TestCase {
 		$this->assertSame('GET', $transport->callsTo('appointments/by-token')[0]['method']);
 	}
 
+	public function testQualificationLookupUsesGet(): void {
+		$transport = new FakeTransport();
+
+		$this->api($transport)->getQualificationByToken('tok');
+
+		$call = $transport->callsTo('qualifications/by-token')[0];
+		$this->assertSame('GET', $call['method']);
+		$this->assertSame('tok', $call['payload']['token']);
+	}
+
+	public function testSubmitQualificationPostsTokenAndAnswers(): void {
+		$transport = new FakeTransport();
+
+		$this->api($transport)->submitQualification('tok', [812 => 'Ja', 813 => '2026-12-01']);
+
+		$call = $transport->callsTo('qualifications/submit')[0];
+		$this->assertSame('POST', $call['method']);
+		$this->assertSame(['token' => 'tok', 'answers' => [812 => 'Ja', 813 => '2026-12-01']], $call['payload']);
+	}
+
 	public function testApplyPostsThePayloadUntouched(): void {
 		$transport = new FakeTransport();
 		$payload   = ['applicant' => ['email' => 'a@b.test'], 'job_id' => 3];
