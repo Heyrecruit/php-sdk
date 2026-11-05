@@ -59,6 +59,8 @@
 			'get_job'                   => 'jobs/view',
 			'get_appointment'           => 'appointments/by-token',
 			'respond_appointment'       => 'appointments/respond',
+			'get_qualification'         => 'qualifications/by-token',
+			'submit_qualification'      => 'qualifications/submit',
 			'apply'                     => 'applicant-jobs/apply',
 		];
 
@@ -239,6 +241,32 @@
 		 */
 		public function respondToAppointment(string $token, string $action): array {
 			return $this->apiRequest($this->url['respond_appointment'], ['token' => $token, 'action' => $action], 'POST');
+		}
+
+		/**
+		 * Get the qualification questions sent by e-mail for a link token (status, company, logo, questions).
+		 *
+		 * @param string $token The link token from the e-mail.
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function getQualificationByToken(string $token): array {
+			return $this->apiRequest($this->url['get_qualification'], ['token' => $token]);
+		}
+
+		/**
+		 * Send the applicant's answers to the qualification questions. POST, because it changes state - a link
+		 * must not trigger it (mail scanners, prefetch).
+		 *
+		 * @param string                $token   The link token from the e-mail.
+		 * @param array<int|string, mixed> $answers Answer per question id.
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function submitQualification(string $token, array $answers): array {
+			return $this->apiRequest($this->url['submit_qualification'], ['token' => $token, 'answers' => $answers], 'POST');
 		}
 
 		/**
