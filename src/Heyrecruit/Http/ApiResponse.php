@@ -57,18 +57,26 @@ final class ApiResponse {
 	/**
 	 * Liefert die Fehlermeldung der API, sonst den Transportfehler, sonst den Status.
 	 *
-	 * Die heyrecruit-API legt Fehler unter 'errors' ab, nicht unter 'message' (AppService::
-	 * sendJsonResponse baut {status, errors|data, detail}); 'message' bleibt als Fallback stehen.
+	 * Die heyrecruit-API legt Fehler unter 'errors' ab (AppService::sendJsonResponse baut
+	 * {status, errors|data, detail}). Unter 'message' steht eine maschinenlesbare Kennung, etwa
+	 * 'company_inactive' bei einer deaktivierten Firma; Konsumenten erkennen den Fall an ihr, deshalb
+	 * steht sie mit in der Meldung.
 	 *
 	 * @return string
 	 */
 	public function describeFailure(): string {
+		$parts = [];
+
 		foreach (['errors', 'message'] as $key) {
 			$value = $this->data[$key] ?? null;
 
-			if (is_string($value) && $value !== '') {
-				return $value;
+			if (is_string($value) && $value !== '' && !in_array($value, $parts, true)) {
+				$parts[] = $value;
 			}
+		}
+
+		if ($parts !== []) {
+			return count($parts) === 1 ? $parts[0] : $parts[0] . ' (' . $parts[1] . ')';
 		}
 
 		return $this->error ?? 'HTTP ' . $this->statusCode;
