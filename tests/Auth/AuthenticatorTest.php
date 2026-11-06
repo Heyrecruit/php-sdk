@@ -132,6 +132,17 @@ final class AuthenticatorTest extends TestCase {
 		$auth->token();
 	}
 
+	public function testInactiveCompanyKeepsItsMarkerInTheException(): void {
+		$transport = new FakeTransport();
+		$transport->queueAuth(new ApiResponse(410, ['status' => 'error', 'errors' => 'Company is inactive.', 'message' => 'company_inactive', 'detail' => 'Gone']));
+		$auth = new Authenticator($transport, new ArrayTokenStore(), self::CONFIG);
+
+		$this->expectException(Exception::class);
+		$this->expectExceptionMessage('Auth error! Message from Heyrecruit: Company is inactive. (company_inactive)');
+
+		$auth->token();
+	}
+
 	public function testSuccessWithoutATokenThrowsInsteadOfCachingNothing(): void {
 		$transport = new FakeTransport();
 		$transport->queueAuth(new ApiResponse(200, ['status' => 'success', 'data' => []]));

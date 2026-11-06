@@ -54,6 +54,22 @@ final class ApiResponseTest extends TestCase {
 		$this->assertSame('Wrong credentials', (new ApiResponse(401, ['message' => 'Wrong credentials']))->describeFailure());
 	}
 
+	public function testFailureDescriptionKeepsTheMachineReadableMessage(): void {
+		// RestComponent: deaktivierte Firma, die Karriereseite erkennt den Fall an 'company_inactive'.
+		$response = new ApiResponse(410, [
+			'status'  => 'error',
+			'errors'  => 'Company is inactive.',
+			'message' => 'company_inactive',
+			'detail'  => 'Gone',
+		]);
+
+		$this->assertSame('Company is inactive. (company_inactive)', $response->describeFailure());
+	}
+
+	public function testIdenticalErrorsAndMessageAreNotRepeated(): void {
+		$this->assertSame('Gone', (new ApiResponse(410, ['errors' => 'Gone', 'message' => 'Gone']))->describeFailure());
+	}
+
 	public function testNonStringErrorsFallsThroughInsteadOfCastingAnArray(): void {
 		// Ein Array unter 'errors' erzeugte sonst "Array to string conversion".
 		$response = new ApiResponse(400, ['status' => 'error', 'errors' => ['email' => ['_empty' => 'x']]]);
