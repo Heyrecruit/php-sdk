@@ -235,7 +235,17 @@ final class HeyRestApiTest extends TestCase {
 
 		$call = $transport->callsTo('qualifications/submit')[0];
 		$this->assertSame('POST', $call['method']);
-		$this->assertSame(['token' => 'tok', 'answers' => [812 => 'Ja', 813 => '2026-12-01']], $call['payload']);
+		$this->assertSame(['token' => 'tok', 'answers' => [812 => 'Ja', 813 => '2026-12-01']], $call['payload'], 'Ohne Dateien kein files-Schlüssel.');
+	}
+
+	public function testSubmitQualificationSendsFilesPerQuestionKey(): void {
+		$transport = new FakeTransport();
+		$files     = ['814_2' => ['name' => 'lebenslauf.pdf', 'data' => base64_encode('%PDF')]];
+
+		$this->api($transport)->submitQualification('tok', [815 => ['Deutsch', 'Englisch']], $files);
+
+		$call = $transport->callsTo('qualifications/submit')[0];
+		$this->assertSame(['token' => 'tok', 'answers' => [815 => ['Deutsch', 'Englisch']], 'files' => $files], $call['payload']);
 	}
 
 	public function testApplyPostsThePayloadUntouched(): void {

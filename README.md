@@ -87,7 +87,7 @@ if ($result['status_code'] === 200) {
 | `getAppointmentByToken(string $token): array` | RSVP landing data for an appointment token. |
 | `respondToAppointment(string $token, string $action): array` | Sends the RSVP answer (`confirm` or `decline`) as POST. |
 | `getQualificationByToken(string $token): array` | Qualification questions sent by e-mail for a link token. |
-| `submitQualification(string $token, array $answers): array` | Sends the answers (per question id) as POST. |
+| `submitQualification(string $token, array $answers, array $files = []): array` | Sends the answers (per question id, checkbox questions as a list) and files (per question `key`, `{name, data}` base64) as POST. |
 | `getGoogleTagCode(?string $publicId = ''): array` | Google Tag Manager snippets as `['head' => ..., 'body' => ...]`. Returns empty strings without an id. |
 | `authenticate(bool $force = false): array` | Requests an access token. Pass `true` to bypass the cache. |
 | `setAuthConfig(array $config): void` | Replaces the client credentials and drops a token issued for the old ones. |
