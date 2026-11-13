@@ -259,14 +259,25 @@
 		 * Send the applicant's answers to the qualification questions. POST, because it changes state - a link
 		 * must not trigger it (mail scanners, prefetch).
 		 *
-		 * @param string                $token   The link token from the e-mail.
-		 * @param array<int|string, mixed> $answers Answer per question id.
+		 * @param string                   $token   The link token from the e-mail.
+		 * @param array<int|string, mixed> $answers Answer per question id; checkbox questions take a list of values.
+		 * @param array<string, array{name: string, data: string}> $files File per question `key` (document
+		 *        questions), `data` base64 encoded. Omitted from the request when empty.
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function submitQualification(string $token, array $answers): array {
-			return $this->apiRequest($this->url['submit_qualification'], ['token' => $token, 'answers' => $answers], 'POST');
+		public function submitQualification(string $token, array $answers, array $files = []): array {
+			$data = ['token' => $token, 'answers' => $answers];
+			if ($files === []) {
+				return $this->apiRequest($this->url['submit_qualification'], $data, 'POST');
+			}
+
+			// Mit Dateien legt der Server jede synchron ab (Upload, Klassifizierung, CV-Analyse) - wie bei apply()
+			// reichen die 15 s des Transports nicht, das SDK braeche ab, obwohl alles gespeichert wurde.
+			$data['files'] = $files;
+
+			return $this->apiRequest($this->url['submit_qualification'], $data, 'POST', self::APPLY_TIMEOUT_SECONDS);
 		}
 
 		/**
