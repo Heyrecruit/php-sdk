@@ -269,11 +269,15 @@
 		 */
 		public function submitQualification(string $token, array $answers, array $files = []): array {
 			$data = ['token' => $token, 'answers' => $answers];
-			if ($files !== []) {
-				$data['files'] = $files;
+			if ($files === []) {
+				return $this->apiRequest($this->url['submit_qualification'], $data, 'POST');
 			}
 
-			return $this->apiRequest($this->url['submit_qualification'], $data, 'POST');
+			// Mit Dateien legt der Server jede synchron ab (Upload, Klassifizierung, CV-Analyse) - wie bei apply()
+			// reichen die 15 s des Transports nicht, das SDK braeche ab, obwohl alles gespeichert wurde.
+			$data['files'] = $files;
+
+			return $this->apiRequest($this->url['submit_qualification'], $data, 'POST', self::APPLY_TIMEOUT_SECONDS);
 		}
 
 		/**

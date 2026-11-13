@@ -236,6 +236,7 @@ final class HeyRestApiTest extends TestCase {
 		$call = $transport->callsTo('qualifications/submit')[0];
 		$this->assertSame('POST', $call['method']);
 		$this->assertSame(['token' => 'tok', 'answers' => [812 => 'Ja', 813 => '2026-12-01']], $call['payload'], 'Ohne Dateien kein files-Schlüssel.');
+		$this->assertNull($call['timeout'], 'Ohne Dateien der Standard-Timeout des Transports.');
 	}
 
 	public function testSubmitQualificationSendsFilesPerQuestionKey(): void {
@@ -246,6 +247,7 @@ final class HeyRestApiTest extends TestCase {
 
 		$call = $transport->callsTo('qualifications/submit')[0];
 		$this->assertSame(['token' => 'tok', 'answers' => [815 => ['Deutsch', 'Englisch']], 'files' => $files], $call['payload']);
+		$this->assertSame(50, $call['timeout'], 'Mit Dateien der lange Upload-Timeout wie bei apply().');
 	}
 
 	public function testApplyPostsThePayloadUntouched(): void {
