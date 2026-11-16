@@ -288,19 +288,23 @@
 		 * Reads the contact data from a CV before the application is sent (auto-fill of the application form).
 		 * Nothing is stored. `data.status` is `done` (with `data.fields` per form field name), `pending` or `failed`.
 		 *
-		 * @param string $fileName   File name with extension (.pdf, .doc or .docx).
-		 * @param string $base64Data File content, base64 encoded.
+		 * `data.status` is `disabled` when the company switched the auto-fill off.
+		 *
+		 * @param string   $fileName   File name with extension (.pdf, .doc or .docx).
+		 * @param string   $base64Data File content, base64 encoded.
+		 * @param int|null $companyId  The company of the career page. Required for admin and headhunter apps,
+		 *                             a company app may omit it.
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function extractCv(string $fileName, string $base64Data): array {
-			return $this->apiRequest(
-				$this->url['extract_cv'],
-				['file' => ['name' => $fileName, 'data' => $base64Data]],
-				'POST',
-				self::CV_EXTRACT_TIMEOUT_SECONDS
-			);
+		public function extractCv(string $fileName, string $base64Data, ?int $companyId = null): array {
+			$data = ['file' => ['name' => $fileName, 'data' => $base64Data]];
+			if ($companyId !== null) {
+				$data['company'] = $companyId;
+			}
+
+			return $this->apiRequest($this->url['extract_cv'], $data, 'POST', self::CV_EXTRACT_TIMEOUT_SECONDS);
 		}
 
 		/**

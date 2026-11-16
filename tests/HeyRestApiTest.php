@@ -261,6 +261,15 @@ final class HeyRestApiTest extends TestCase {
 		$this->assertSame(25, $call['timeout'], 'Der Server wartet bis 12 s auf den Parser, 15 s Standard reichen mit Upload nicht.');
 	}
 
+	public function testExtractCvSendsTheCompanyWhenGiven(): void {
+		$transport = new FakeTransport();
+
+		$this->api($transport)->extractCv('lebenslauf.pdf', 'JVBERg==', 2682);
+
+		$call = $transport->callsTo('cv/extract')[0];
+		$this->assertSame(['file' => ['name' => 'lebenslauf.pdf', 'data' => 'JVBERg=='], 'company' => 2682], $call['payload']);
+	}
+
 	public function testApplyPostsThePayloadUntouched(): void {
 		$transport = new FakeTransport();
 		$payload   = ['applicant' => ['email' => 'a@b.test'], 'job_id' => 3];
