@@ -39,6 +39,9 @@
 		// 2 % ueber 15 s (22.09.-06.10.2026). Unter den 60 s des Portal-nginx, sonst 504 + Retry.
 		private const APPLY_TIMEOUT_SECONDS = 50;
 
+		// Der Server wartet hoechstens rund 12 s auf den CV-Parser; dazu kommt der Upload der Datei.
+		private const CV_EXTRACT_TIMEOUT_SECONDS = 25;
+
 		/**
 		 * API request url.
 		 *
@@ -62,6 +65,7 @@
 			'get_qualification'         => 'qualifications/by-token',
 			'submit_qualification'      => 'qualifications/submit',
 			'apply'                     => 'applicant-jobs/apply',
+			'extract_cv'                => 'cv/extract',
 		];
 
 		private Transport $transport;
@@ -278,6 +282,25 @@
 			$data['files'] = $files;
 
 			return $this->apiRequest($this->url['submit_qualification'], $data, 'POST', self::APPLY_TIMEOUT_SECONDS);
+		}
+
+		/**
+		 * Reads the contact data from a CV before the application is sent (auto-fill of the application form).
+		 * Nothing is stored. `data.status` is `done` (with `data.fields` per form field name), `pending` or `failed`.
+		 *
+		 * @param string $fileName   File name with extension (.pdf, .doc or .docx).
+		 * @param string $base64Data File content, base64 encoded.
+		 *
+		 * @return array
+		 * @throws Exception
+		 */
+		public function extractCv(string $fileName, string $base64Data): array {
+			return $this->apiRequest(
+				$this->url['extract_cv'],
+				['file' => ['name' => $fileName, 'data' => $base64Data]],
+				'POST',
+				self::CV_EXTRACT_TIMEOUT_SECONDS
+			);
 		}
 
 		/**

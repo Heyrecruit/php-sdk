@@ -250,6 +250,17 @@ final class HeyRestApiTest extends TestCase {
 		$this->assertSame(50, $call['timeout'], 'Mit Dateien der lange Upload-Timeout wie bei apply().');
 	}
 
+	public function testExtractCvPostsTheFileWithItsOwnTimeout(): void {
+		$transport = new FakeTransport();
+
+		$this->api($transport)->extractCv('lebenslauf.pdf', base64_encode('%PDF'));
+
+		$call = $transport->callsTo('cv/extract')[0];
+		$this->assertSame('POST', $call['method']);
+		$this->assertSame(['file' => ['name' => 'lebenslauf.pdf', 'data' => base64_encode('%PDF')]], $call['payload']);
+		$this->assertSame(25, $call['timeout'], 'Der Server wartet bis 12 s auf den Parser, 15 s Standard reichen mit Upload nicht.');
+	}
+
 	public function testApplyPostsThePayloadUntouched(): void {
 		$transport = new FakeTransport();
 		$payload   = ['applicant' => ['email' => 'a@b.test'], 'job_id' => 3];
