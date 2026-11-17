@@ -270,6 +270,16 @@ final class HeyRestApiTest extends TestCase {
 		$this->assertSame(['file' => ['name' => 'lebenslauf.pdf', 'data' => 'JVBERg=='], 'company' => 2682], $call['payload']);
 	}
 
+	public function testExtractCvSendsTheFormQuestionsWhenGiven(): void {
+		$transport = new FakeTransport();
+		$question = ['field_name' => 'work_experience', 'form_type' => 'select', 'title' => 'Berufserfahrung', 'options' => ['keine', 'mehr als 3 Jahre']];
+
+		$this->api($transport)->extractCv('lebenslauf.pdf', 'JVBERg==', 2682, ['x' => $question]);
+
+		$call = $transport->callsTo('cv/extract')[0];
+		$this->assertSame([$question], $call['payload']['questions']);
+	}
+
 	public function testApplyPostsThePayloadUntouched(): void {
 		$transport = new FakeTransport();
 		$payload   = ['applicant' => ['email' => 'a@b.test'], 'job_id' => 3];

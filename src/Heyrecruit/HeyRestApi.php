@@ -294,14 +294,20 @@
 		 * @param string   $base64Data File content, base64 encoded.
 		 * @param int|null $companyId  The company of the career page. Required for admin and headhunter apps,
 		 *                             a company app may omit it.
+		 * @param array    $questions  Further questions of the application form to answer from the CV, each with
+		 *                             `field_name`, `form_type` (text, textarea, select, checkbox, date), `title` and
+		 *                             `options` (select/checkbox). Their answers come back in `data.fields` as well.
 		 *
 		 * @return array
 		 * @throws Exception
 		 */
-		public function extractCv(string $fileName, string $base64Data, ?int $companyId = null): array {
+		public function extractCv(string $fileName, string $base64Data, ?int $companyId = null, array $questions = []): array {
 			$data = ['file' => ['name' => $fileName, 'data' => $base64Data]];
 			if ($companyId !== null) {
 				$data['company'] = $companyId;
+			}
+			if ($questions !== []) {
+				$data['questions'] = array_values($questions);
 			}
 
 			return $this->apiRequest($this->url['extract_cv'], $data, 'POST', self::CV_EXTRACT_TIMEOUT_SECONDS);
